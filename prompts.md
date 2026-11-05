@@ -1,9 +1,10 @@
-> Detalla en esta sección los prompts principales utilizados durante la creación del proyecto, que justifiquen el uso de asistentes de código en todas las fases del ciclo de vida del desarrollo. Esperamos un máximo de 3 por sección, principalmente los de creación inicial o  los de corrección o adición de funcionalidades que consideres más relevantes.
-Puedes añadir adicionalmente la conversación completa como link o archivo adjunto si así lo consideras
-
+> Registro del uso de IA en el proyecto **JobPilot** (Andrés Avellá Navarro).
+> Para cada sección se recoge el prompt con el que se generó el contenido y los prompts de revisión con los que se refina.
+> ⏳ = prompt **planificado para una entrega posterior** (indicada entre paréntesis). Se ejecutará en esa fase y entonces se añadirán su resultado y el criterio humano. Los prompts sin ⏳ ya se han ejecutado.
 
 ## Índice
 
+0. [Flujo de trabajo con IA](#0-flujo-de-trabajo-con-ia)
 1. [Descripción general del producto](#1-descripción-general-del-producto)
 2. [Arquitectura del sistema](#2-arquitectura-del-sistema)
 3. [Modelo de datos](#3-modelo-de-datos)
@@ -14,13 +15,88 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 ---
 
+## 0. Flujo de trabajo con IA
+
+### Herramientas y modelos por fase
+
+| Fase del ciclo de vida | Herramienta | Modelo | Uso |
+|---|---|---|---|
+| **Análisis** | Claude (claude.ai, Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Generar la idea a partir de un problema real (búsqueda de empleo), acotar el MVP a 5 funcionalidades y redactar las historias de usuario. |
+| **Diseño** | Claude (claude.ai) | Claude Opus 5.5 | Arquitectura, modelo de datos, contrato OpenAPI, tickets y la documentación de la Entrega 1. |
+| **Implementación** | Claude Code (previsto) | Claude Sonnet 5.5 para el código del día a día; Claude Opus 5.5 para los tickets complejos (`LlmGateway`, análisis de encaje) | Implementación ticket a ticket guiada por el `readme.md` y el `CLAUDE.md`. |
+| **Pruebas** | Claude Code (previsto) | Claude Sonnet 5.5 | Generar casos de test parametrizados, *fixtures* de respuestas del LLM y el E2E con Playwright. |
+| **Despliegue** | Claude Code (previsto) | Claude Sonnet 5.5 | Dockerfile multi-stage, `docker-compose.yml` y workflow de GitHub Actions. |
+| **Mantenimiento** | Claude Code (previsto) | Claude Sonnet 5.5 | Revisión de PRs, refactorización y actualización de la documentación. |
+
+Además, **la IA forma parte del producto**: el backend usa Claude a través de Spring AI para estructurar CVs, extraer requisitos, evaluar el encaje y redactar cartas.
+
+### Contexto avanzado
+
+- **Proyecto de claude.ai** con la descripción y las reglas del máster como contexto permanente, para que todas las respuestas respeten los requisitos de evaluación (3–5 funcionalidades, tests, IA en las fases del ciclo de vida).
+- **Plantillas oficiales** del `readme.md` y el `prompts.md` pasadas como entrada para que la documentación siga exactamente su estructura.
+- **`CLAUDE.md` (previsto para la Entrega 2)** en la raíz del repo con: stack y versiones, estructura *package-by-feature*, convenciones (DTOs como `record`, errores con `ProblemDetail`, consultas siempre filtradas por `userId`), comandos de build y test, y la regla "todo ticket se cierra con sus tests en verde".
+- **Subagente de revisión (previsto)**: un agente que no ha visto el desarrollo revisa cada PR contra los criterios de aceptación del ticket, para que el código no se valide a sí mismo.
+
+### Criterio humano (ajustes manuales sobre la salida de la IA)
+
+| Momento | Decisión tomada por mí |
+|---|---|
+| Elección de la idea | Partí de mi situación real (estoy buscando trabajo) para que el producto me sirva mientras lo construyo y funcione como portfolio. |
+| Stack | Pedí que todo girara en torno a **Java**, que es lo que domino como desarrollador web junior, y elegí **React** frente a Thymeleaf para el frontend. |
+| Estructura de la documentación | Exigí seguir las plantillas oficiales del máster en lugar del formato libre que proponía la IA. |
+| Revisión de versiones | Pedí revisar que la documentación cumpliera los requisitos de la entrega; a raíz de esa revisión se actualizó el stack a Spring Boot 4 / Spring AI 2.0, porque la propuesta inicial usaba una versión ya sin soporte. |
+| Revisión de arquitectura (2.1) | Ejecuté la revisión en un chat nuevo, para que no la hiciera la misma conversación que había escrito el documento. Acepté, entre otros, los cambios sobre la gestión de errores del LLM (504 / 503 / 502). |
+| Revisión de coherencia (secciones 3, 4 y 6) | La revisión destapó que tres cambios que yo había aceptado en la ronda de la 2.1 contradecían otras secciones. **Lección:** después de aceptar un cambio hay que cruzarlo con el resto del documento. De las 24 incoherencias encontradas, **decidí corregir la 1 a la 11**, que son las que afectan al flujo principal, y dejar la 12 a la 24 (tipos, textos y ajustes menores) para antes de la Entrega 2. |
+| Revisión del modelo de datos (sección 3) | Apliqué el diff completo de la IA (FKs compuestas, índices documentados, `CHECK` nuevos, `VARCHAR(3)` para la moneda) y alineé el ticket de base de datos. Mantuve JSONB en idiomas, formación y sugerencias porque nunca se filtran por ellos en SQL. |
+
+---
+
 ## 1. Descripción general del producto
 
-**Prompt 1:**
+**Prompt 1:** Generación de la idea (Claude Opus 5.5, claude.ai)
 
-**Prompt 2:**
+```
+Tengo que realizar un Proyecto para un producto de software end-to-end apoyándome
+en IA en todas las fases del ciclo de vida por lo que necesito que me des una idea
+de que podría ser el producto yo en este caso me encuentro sin trabajo por lo que
+podrías hacer algo que me solucione ese problema.
+```
 
-**Prompt 3:**
+*Resultado:* propuesta de **JobPilot** (copiloto de búsqueda de empleo) con 5 funcionalidades must-have (perfil desde CV, importar oferta, análisis de encaje, carta y CV adaptados, tablero de candidaturas), 2 should-have y dos ideas alternativas (simulador de entrevistas, radar de empresas). La IA recomendó además evitar el scraping de portales de empleo, por sus condiciones de uso y su fragilidad.
+
+**Prompt 2:** Adaptación del stack a mi perfil
+
+```
+Soy un Desarrollador Web Junior y manejo Java
+```
+
+*Resultado:* stack ajustado a Java 21 + Spring Boot 3, Spring Data JPA + PostgreSQL + Flyway, Spring AI para Claude, PDFBox para leer el CV, JUnit 5 + Mockito + Testcontainers + Playwright for Java para los tests, y dos opciones de frontend (React o Thymeleaf + HTMX). También propuso qué funcionalidad entregar en cada fase.
+
+**Prompt 3:** Generación de la documentación de la Entrega 1 con las plantillas oficiales
+
+```
+Me parece bien y el frontend prefiero React, ahora solo faltaria realizar el
+readme.md y el prompts.md. Ten en cuenta que tienes que seguir las plantillas
+oficiales de mi master que son estas:
+[plantilla de prompts.md adjunta en el mensaje]
+[plantilla de readme.md adjunta como fichero]
+Nombre Completo: Andrés Avellá Navarro
+URL de mi repo: https://github.com/AndresAvella16/AI4Devs-finalproject
+```
+
+*Resultado:* primera versión completa del `readme.md` (secciones 0–7) y de este `prompts.md`. Durante la generación, la IA tomó una decisión de diseño relevante: **el LLM clasifica cada requisito y Java calcula la puntuación**, para que el número sea determinista y se pueda testear.
+
+**Prompt 4:** Revisión de la documentación contra los requisitos de la Entrega 1
+
+```
+Pero estos dos archivos estan listos para la entrega 1? con todos los requisitos
+teniendo en cuenta que hay 2 entregas mas?
+```
+
+*Resultado:* la IA comparó los dos archivos con la lista de requisitos de la Entrega 1 y con los criterios de feedback (problema, MVP viable, coherencia técnica, IA en ≥ 4 fases), validó el YAML OpenAPI (sintaxis y `$ref`) y consultó las versiones vigentes del stack. Cambios aplicados:
+- **Spring Boot 3 → Spring Boot 4** y Spring AI 2.0: Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026 y Spring AI 2.0 requiere Boot 4. React 18 → React 19.
+- Añadida una tabla **"Stack tecnológico"** explícita en la sección 2.2, porque es un requisito de la Entrega 1 y la información estaba repartida por el documento.
+- Aclarada la regla de transiciones del tablero (`OFERTA → DESCARTADA` permitida, sin retrocesos ni saltos), que estaba ambigua entre la HU-05 y la sección de tests.
 
 ---
 
@@ -28,98 +104,333 @@ Puedes añadir adicionalmente la conversación completa como link o archivo adju
 
 ### **2.1. Diagrama de arquitectura:**
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1 (documentación completa de la Entrega 1).
 
-**Prompt 2:**
+**Prompt 2:** Revisión crítica de la arquitectura (Claude, chat nuevo "Revisión de arquitectura y modelo de datos")
 
-**Prompt 3:**
+```
+Actúa como arquitecto de software senior revisando el proyecto de un desarrollador
+junior. Te paso la sección 2.1 de mi readme.md (diagrama Mermaid y justificación).
+Contexto: MVP de 5 funcionalidades, una sola persona, Spring Boot 4 + React + PostgreSQL
++ Claude vía Spring AI, a entregar en pocas semanas.
+1. ¿La elección de monolito modular está bien justificada para este alcance?
+2. ¿Falta algún componente o flecha en el diagrama?
+3. ¿Qué riesgos tienen las llamadas síncronas al LLM dentro de la petición HTTP y
+   cuál es la mitigación mínima razonable para un MVP?
+Responde con una lista de cambios concretos, ordenados por impacto. No reescribas
+la sección entera.
+
+[A continuación pegué la sección 2.1 completa de mi readme.md]
+```
+
+*Resultado:* la IA propuso una lista de cambios ordenada por impacto. Entre los que acepté:
+- Un nodo de almacenamiento de ficheros (`FileStorage`, `bytea`).
+- Un límite de 20 peticiones al día con un contador en base de datos.
+- Distinguir los errores del LLM: `504` por timeout, `503` con `Retry-After` por saturación y `502` por respuesta no válida.
+- Citar el RFC 9457 en lugar del 7807.
+
+En esa misma conversación revisé también el modelo de datos (sección 3 → Prompt 2).
+
+*Ajuste humano:* la revisión de coherencia posterior (sección 4 → Prompt 3) mostró que dos de los cambios aceptados contradecían otras secciones del readme:
+- **Almacenamiento de ficheros:** la sección 2.5 y la HU-01 dicen que el PDF no se guarda. Eliminé el nodo y dejé explícito que no se guardan ficheros.
+- **Límite de peticiones:** la sección 2.5 ya definía 30/h con Bucket4j. Dejé una sola fuente de verdad en la 2.5, añadiendo un `Semaphore` de 3 llamadas simultáneas, y la 2.1 remite a ella.
+
+Mantuve la gestión de errores 504/503/502 y el RFC 9457 en todo el documento.
+
+**Prompt 3:** Validación de los diagramas Mermaid (Claude Opus 5.5, claude.ai)
+
+```
+Los diagramas no se pueden ver [...] no voy a guardar los cambios sin que se vean
+los diagramas de flujo principal de usuario, Diagrama de arquitectura, etc
+```
+
+*Resultado:* la IA renderizó los 5 diagramas del readme con `mermaid-cli`, el motor oficial de Mermaid, y todos se generaron sin errores. Así descartó un problema de sintaxis. El origen era un fallo conocido del editor web de GitHub: la pestaña *Preview* no renderiza Mermaid, pero el archivo guardado sí.
+
+*Ajuste humano:* en lugar de modificar los diagramas, guardé el readme en la rama `feature/entrega-1-aan` y comprobé el resultado en la vista normal del archivo.
 
 ### **2.2. Descripción de componentes principales:**
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 2) Comprobación de compatibilidad de librerías
 
-**Prompt 3:**
+```
+Para este listado de componentes (Spring Boot 4, Java 21, Spring AI 2.0 con Anthropic,
+springdoc-openapi, JJWT, Bucket4j, PDFBox, OpenHTMLtoPDF, Flyway, Testcontainers,
+React 19, Vite, TanStack Query, dnd-kit, React Hook Form, Zod, Tailwind, Vitest,
+MSW, Playwright for Java):
+dime la última versión estable compatible entre sí y señala cualquier conflicto
+conocido (por ejemplo, Spring AI y la versión de Spring Boot). Formato: tabla
+componente | versión | nota.
+```
+
+**Prompt 3:** ⏳ (Entrega 2) Simplificación para un perfil junior
+
+```
+De estos componentes, ¿cuáles podría eliminar o sustituir por algo más simple sin
+perder ninguna de las 5 funcionalidades ni la calidad de los tests? Justifica cada
+recorte en una línea.
+```
 
 ### **2.3. Descripción de alto nivel del proyecto y estructura de ficheros**
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 2) Generación del `CLAUDE.md` a partir de la estructura
 
-**Prompt 3:**
+```
+A partir de las secciones 2.2 y 2.3 de mi readme.md, genera un CLAUDE.md para la raíz
+del repositorio que sirva de contexto a Claude Code durante la implementación. Incluye:
+stack y versiones, estructura de carpetas y responsabilidad de cada módulo,
+convenciones obligatorias (DTOs como record, ProblemDetail, consultas filtradas por
+userId, LlmGateway como único punto de acceso al LLM), comandos de build/test/run y
+la definición de hecho de un ticket. Máximo 120 líneas.
+```
+
+**Prompt 3:** ⏳ (Entrega 2) Scaffolding inicial
+
+```
+Usando el CLAUDE.md del repositorio, crea el scaffolding de backend/ (Spring Boot 4,
+Java 21, Maven Wrapper) y frontend/ (Vite + React + TypeScript) con la estructura de
+carpetas de la sección 2.3, una ruta /actuator/health y una página de inicio que
+llame a la API. No implementes todavía ninguna funcionalidad. Verifica que
+./mvnw verify y npm run build pasan.
+```
 
 ### **2.4. Infraestructura y despliegue**
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 2) Docker Compose y Dockerfiles
 
-**Prompt 3:**
+```
+Genera un Dockerfile multi-stage para el backend (Maven → eclipse-temurin:21-jre,
+usuario no root, healthcheck sobre /actuator/health), un Dockerfile para el frontend
+(build de Vite → nginx sirviendo estáticos y redirigiendo /api al backend) y un
+docker-compose.yml con postgres:16 (volumen persistente), backend y frontend, leyendo
+las variables de .env. Añade docker-compose.e2e.yml con LLM_MODE=fake.
+```
+
+**Prompt 3:** ⏳ (Entrega 2) Pipeline de CI
+
+```
+Crea .github/workflows/ci.yml con tres jobs: backend (./mvnw verify, que incluye los
+tests de Testcontainers), frontend (npm ci, lint, test, build) y e2e (depende de los
+dos anteriores; levanta docker-compose.e2e.yml y ejecuta Playwright). Usa caché de
+Maven y npm. El deploy a Render solo debe ejecutarse en main y si todo está en verde.
+```
 
 ### **2.5. Seguridad**
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 3) Revisión de amenazas
 
-**Prompt 3:**
+```
+Haz un análisis rápido de amenazas (STRIDE simplificado) de JobPilot con la
+arquitectura y la tabla de seguridad de mi readme.md. Presta especial atención a:
+la subida de PDFs, la prompt injection a través del texto de las ofertas, el acceso
+a recursos de otros usuarios y la gestión del JWT en el frontend. Dime qué falta en
+la tabla y qué test automatizado demostraría cada control.
+```
+
+**Prompt 3:** ⏳ (Entrega 3) Endurecimiento del prompt del sistema
+
+```
+Este es el prompt de sistema que uso para extraer requisitos de una oferta:
+[pegar prompts/extract-offer.st]
+Propón una versión más robusta frente a prompt injection (el texto de la oferta es
+contenido no confiable) sin empeorar la extracción. Incluye 3 ofertas de prueba
+maliciosas para añadirlas como fixtures de test.
+```
 
 ### **2.6. Tests**
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 3) Casos de test del cálculo de puntuación
 
-**Prompt 3:**
+```
+Genera una clase JUnit 5 MatchScoreCalculatorTest con @ParameterizedTest y
+@MethodSource que cubra: todo CUMPLE, todo NO_CUMPLE, sin requisitos deseables,
+un único requisito, mezcla de resultados, redondeo HALF_UP en el límite (x,5),
+detección de requisito bloqueante y lista vacía (excepción). Usa AssertJ.
+La fórmula está en la sección 1.2 del readme.md.
+```
 
----
+**Prompt 3:** ⏳ (Entrega 3) E2E del flujo principal
 
-### 3. Modelo de Datos
-
-**Prompt 1:**
-
-**Prompt 2:**
-
-**Prompt 3:**
-
----
-
-### 4. Especificación de la API
-
-**Prompt 1:**
-
-**Prompt 2:**
-
-**Prompt 3:**
+```
+Escribe un test E2E con Playwright for Java (JUnit 5) que, contra
+docker-compose.e2e.yml (LLM_MODE=fake), recorra: registro → subida de
+fixtures/cv-ejemplo.pdf → guardar perfil → pegar fixtures/oferta-java-junior.txt →
+comprobar que aparecen 6 requisitos y la puntuación 85 → generar carta → descargar
+PDF → guardar en el tablero → arrastrar a "Enviada" → recargar y comprobar la
+columna. Usa selectores data-testid y nada de esperas fijas.
+```
 
 ---
 
-### 5. Historias de Usuario
+## 3. Modelo de Datos
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** Revisión de normalización y restricciones (Claude, chat "Revisión de arquitectura y modelo de datos")
 
-**Prompt 3:**
+```
+Revisa este modelo de datos (diagrama Mermaid + tablas de la sección 3 de mi
+readme.md) como DBA de PostgreSQL:
+1. ¿Está bien usar JSONB para idiomas, formación y sugerencias, o debería normalizarlo?
+2. ¿Faltan índices para las consultas del dashboard y del tablero?
+3. ¿Hay alguna restricción que no se pueda expresar como está escrita (por ejemplo,
+   UNIQUE sobre lower(email))?
+4. ¿Cómo garantizo que un requirement_match apunta a un requisito de la misma oferta
+   que su análisis?
+Devuelve los cambios como diff sobre la sección.
+```
+
+*Resultado:* la IA devolvió un diff completo de la sección 3. Respuestas a las cuatro preguntas:
+1. **JSONB:** se mantiene para idiomas, formación y sugerencias, porque nunca se filtran en SQL. Se añaden `NOT NULL` y `CHECK (jsonb_typeof(...) = 'array')`, y la forma de cada elemento la valida la aplicación.
+2. **Índices:** nueva tabla de índices con la consulta a la que sirve cada uno, más la consulta `LATERAL` del dashboard. Recordó que PostgreSQL no indexa las FKs automáticamente.
+3. **`UNIQUE (lower(email))`:** no se puede declarar así como restricción. Se sustituye por normalizar en la aplicación + `CHECK (email = lower(email))` + `UNIQUE` normal. Para las habilidades se usa un índice único de expresión.
+4. **Requisito de la misma oferta:** columna `offer_id` en `requirement_matches` y dos **FKs compuestas** que la comparten. También una FK compuesta en `applications` para que la candidatura sea siempre del propietario de la oferta.
+
+Además propuso `currency VARCHAR(3)` en lugar de `CHAR(3)`, porque Hibernate falla al validar el esquema con `bpchar`, y varios `CHECK` nuevos (moneda obligatoria si hay salario, `board_position >= 0`, `applied_at` obligatorio desde ENVIADA, historial sin estados repetidos).
+
+*Ajuste humano:* primero corregí las incoherencias 1–11 de la revisión de coherencia y después **apliqué el diff completo** antes de cerrar la Entrega 1. Al aplicarlo:
+- Mantuve la referencia al endpoint de reintento (`POST /offers/{offerId}/extraction`) que había añadido con la fila 5.
+- Actualicé el ticket JP-DB-01 (restricciones, criterios de aceptación y datos de prueba con `applied_at`) para que no quedara desalineado. Esto era la fila 19 de la revisión de coherencia.
+
+**Prompt 3:** ⏳ (Entrega 2) Generación de la migración Flyway
+
+```
+A partir de la sección 3.2 de mi readme.md, genera V1__init_schema.sql para
+PostgreSQL 16 con todas las tablas, FKs con ON DELETE CASCADE, CHECKs para los
+enumerados, índices únicos funcionales e índices de las FKs. Después genera
+R__demo_data.sql con los datos de prueba descritos en el ticket JP-DB-01,
+idempotente con ON CONFLICT DO NOTHING.
+```
 
 ---
 
-### 6. Tickets de Trabajo
+## 4. Especificación de la API
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 2) Validación del contrato OpenAPI
 
-**Prompt 3:**
+```
+Valida este YAML OpenAPI 3.0.3 (sección 4 de mi readme.md): errores de sintaxis,
+$ref rotos, códigos de estado incoherentes con las historias de usuario y campos
+que falten respecto al modelo de datos. Comprueba también que el ejemplo de
+puntuación (85) coincide con la fórmula de la sección 1.2.
+```
+
+**Prompt 3:** Coherencia entre API, modelo y tickets (Claude, chat "Revisión de arquitectura y modelo de datos")
+
+```
+Cruza la sección 4 (API), la 3 (modelo de datos) y la 6 (tickets) de mi readme.md y
+dame una tabla de incoherencias: campo o endpoint | dónde aparece | dónde falta o
+difiere | corrección propuesta.
+```
+
+*Resultado:* tabla de **24 incoherencias** ordenadas por impacto. La IA indicó que las tres primeras eran contradicciones introducidas por cambios suyos de la ronda de la 2.1 y separó las filas 1–11, las que un revisor encontraría siguiendo el flujo principal, de las 12–24, ajustes de tipos y de texto. Después de que yo eligiera el alcance, explicó cómo se relacionaban algunas filas entre sí.
+
+*Ajuste humano:* **decidí corregir las filas 1 a 11** y aplicarlas en el readme:
+
+| # | Corrección aplicada |
+|---|---|
+| 1 | Eliminado el almacenamiento de ficheros: solo se guarda `cv_raw_text` y los PDF se generan bajo demanda. |
+| 2 | Límite de uso de la IA con una sola fuente de verdad en la 2.5: Bucket4j a 30/h por usuario y `Semaphore` de 3 llamadas simultáneas. |
+| 3 | Errores de IA en la API: `LlmInvalidResponse` (502), `LlmOverloaded` (503 + `Retry-After`) y `LlmTimeout` (504). Actualizados el ticket 2 y los tests. |
+| 4 | `POST /offers` responde siempre 201 y guarda la oferta con `FALLIDA` si la IA falla, así que no devuelve códigos 50x. |
+| 5 | Nuevo `POST /offers/{offerId}/extraction` para reintentar: borra los requisitos y análisis anteriores en una transacción y devuelve 409 si la oferta ya está COMPLETADA. |
+| 6 | Nuevo schema `OfferSummary` para el dashboard, con `latestScore`, `hasBlockingGap` y `applicationStatus`. |
+| 7 | `GET /offers/{offerId}/documents?type=` con `DocumentHistoryResponse` (última versión + historial) y schema `DocumentResponse`. |
+| 8 | `PUT /documents/{id}` sustituido por `POST /documents/{id}/versions`, que devuelve 201 con un id nuevo; cuerpo `{type}` para generar; 409 si dos ediciones chocan. |
+| 9 | `POST /profile/cv` devuelve un borrador (`CvDraftResponse`) sin guardarlo; `PUT /profile` crea (201) o reemplaza (200). Schemas `ProfileRequest` y `ProfileResponse`. |
+| 10 | `PATCH /status` solo cambia de columna (mismo estado → 400); el orden dentro de la columna se cambia con `PATCH /applications/{id}`. Ticket 3 actualizado con un hook propio. |
+| 11 | Schemas `CreateApplicationRequest` y `UpdateApplicationRequest` (con `version` obligatoria); 409 si la candidatura ya existe. |
+
+Siguiendo el consejo de la IA, marqué como `nullable` los campos de los schemas nuevos que admiten NULL en la base de datos. Al pasar `POST /offers` a devolver ofertas FALLIDA sin título, también marqué como `nullable` `OfferResponse.title` y `ApplicationResponse.offerTitle`, para no abrir una incoherencia nueva. Después apliqué también el diff de la sección 3 (ver sección 3 → Prompt 2), lo que resolvió además las filas 19 (ticket 1 alineado) y 21 (`CHECK (board_position >= 0)`). El resto de las filas 12–24 quedan **pendientes para antes de la Entrega 2**.
 
 ---
 
-### 7. Pull Requests
+## 5. Historias de Usuario
 
-**Prompt 1:**
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:**
+**Prompt 2:** ⏳ (Entrega 2) Revisión INVEST
 
-**Prompt 3:**
+```
+Actúa como Product Owner. Evalúa cada una de estas 5 historias de usuario con los
+criterios INVEST y dime cuál no es lo bastante pequeña o testeable. Para cada
+criterio de aceptación en Gherkin, dime si es verificable de forma automática y
+con qué tipo de test (unitario, integración o E2E).
+```
+
+**Prompt 3:** ⏳ (Entrega 3) Casos límite que faltan
+
+```
+Para la HU-03 (análisis de encaje) y la HU-05 (tablero), propón los escenarios
+Gherkin de casos límite que faltan (concurrencia, datos vacíos, errores de red),
+priorizando los que podría encontrarse un usuario real en el MVP.
+```
+
+---
+
+## 6. Tickets de Trabajo
+
+**Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
+
+**Prompt 2:** ⏳ (Entrega 2) Orden de implementación y dependencias
+
+```
+Con el backlog de la sección 6 de mi readme.md, ordena los tickets para que al final
+de la Entrega 2 funcione de extremo a extremo "importar oferta → análisis de encaje",
+y al final de la Entrega 3 estén las 5 funcionalidades y la suite de tests. Dame un
+plan por semanas con las dependencias entre tickets y señala el camino crítico.
+```
+
+**Prompt 3:** ⏳ (Entrega 2) Implementación guiada por ticket (plantilla para Claude Code)
+
+```
+Implementa el ticket [ID] del readme.md siguiendo el CLAUDE.md.
+1. Antes de escribir código, resume el alcance y los criterios de aceptación y
+   propón la lista de ficheros que vas a crear o modificar. Espera mi confirmación.
+2. Escribe primero los tests de los criterios de aceptación.
+3. Implementa hasta que ./mvnw verify (o npm test) pase.
+4. Termina con un resumen: qué has hecho, qué has decidido tú y qué queda pendiente.
+```
+
+---
+
+## 7. Pull Requests
+
+> Todavía no hay PRs (Entrega 1, solo documentación). Estos son los prompts previstos para preparar y revisar las PRs a partir de la Entrega 2.
+
+**Prompt 1:** ⏳ (Entrega 2) Descripción de la PR
+
+```
+A partir del diff de esta rama y del ticket [ID] del readme.md, redacta la
+descripción de la PR con: contexto y ticket enlazado, cambios principales,
+cómo probarlo en local, riesgos y checklist (tests, documentación, migraciones).
+Título en formato Conventional Commits.
+```
+
+**Prompt 2:** ⏳ (Entrega 2) Revisión independiente (subagente)
+
+```
+Eres un revisor que no ha participado en el desarrollo. Revisa este diff contra los
+criterios de aceptación del ticket [ID]. Busca: criterios sin test, consultas que no
+filtran por userId, errores no manejados de LlmGateway, secretos o datos personales
+en los logs y código muerto. Devuelve solo los hallazgos, ordenados por gravedad.
+```
+
+**Prompt 3:** ⏳ (Entrega 3) Actualización de la documentación tras la fusión
+
+```
+Esta PR ya se ha fusionado. Actualiza las secciones del readme.md afectadas
+(modelo de datos, API, instrucciones de instalación) y añade la entrada
+correspondiente en la sección 7 con un resumen de la PR. No cambies nada más.
+```

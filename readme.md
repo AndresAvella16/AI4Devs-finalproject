@@ -286,9 +286,16 @@ flowchart LR
 **Sacrificios / déficits**
 
 - **Escalado conjunto:** no se puede escalar solo la parte de IA (la más costosa en latencia); toda la app escala junta.
-- **Llamadas síncronas al LLM:** la extracción y el análisis tardan varios segundos y se ejecutan dentro de la petición HTTP. Para el MVP es aceptable (la UI muestra un estado de carga); a futuro se podría pasar a procesamiento asíncrono con una cola y *polling* o SSE.
-- **Dependencia de un servicio externo:** si la API del LLM no está disponible, F1–F4 se degradan (se devuelve `502` con un mensaje claro). F5 (tablero) sigue funcionando.
-- **Coste por uso del LLM:** se mitiga limitando las peticiones por usuario y guardando los resultados para no recalcularlos.
+- **Llamadas síncronas al LLM:** la extracción y el análisis tardan varios segundos y se ejecutan dentro de la petición HTTP. Para el MVP es aceptable (la UI muestra un estado de carga), con estas mitigaciones mínimas:
+  - **Timeout** en el cliente HTTP del LLM. Si se supera, se responde `504` (`LlmTimeout`).
+  - **Concurrencia limitada:** un máximo de 3 llamadas simultáneas al LLM (ver 2.5). Si están todas ocupadas, o el proveedor está saturado, se responde `503` con `Retry-After` (`LlmOverloaded`).
+  - **Respuesta no válida** tras un reintento: se responde `502` (`LlmInvalidResponse`).
+  - Las llamadas al LLM se hacen **fuera de la transacción de base de datos**, para no tener conexiones bloqueadas mientras el modelo responde.
+  - A futuro se podría pasar a procesamiento asíncrono con una cola y *polling* o SSE.
+- **Dependencia de un servicio externo:** si la API del LLM no está disponible, F1–F4 se degradan con los códigos anteriores y un mensaje claro. F5 (tablero) sigue funcionando. Al importar una oferta (F2), el texto se guarda igualmente con estado `FALLIDA` y se puede reintentar la extracción más tarde.
+- **Coste por uso del LLM:** se mitiga con el límite de peticiones por usuario (ver 2.5) y guardando los resultados para no recalcularlos.
+
+**Ficheros:** no se guardan ficheros. Del CV solo se guarda el texto extraído (`cv_raw_text`), y los PDF de la carta y del CV adaptado se generan bajo demanda en cada exportación.
 
 ### **2.2. Descripción de componentes principales:**
 
@@ -314,7 +321,7 @@ flowchart LR
 | Formularios | React Hook Form + Zod | Formularios de perfil, oferta y login con validación tipada. |
 | Kanban | dnd-kit | Arrastrar y soltar tarjetas entre columnas, accesible por teclado. |
 | Estilos | Tailwind CSS | Estilos utilitarios y diseño responsive. |
-| **API REST** | Spring Boot 4 (Spring Web), Java 21 | Endpoints `/api/v1/**`, DTOs como `record`, validación con Bean Validation y errores en formato RFC 7807 (`ProblemDetail`). |
+| **API REST** | Spring Boot 4 (Spring Web), Java 21 | Endpoints `/api/v1/**`, DTOs como `record`, validación con Bean Validation y errores en formato RFC 9457 (`ProblemDetail`). |
 | Documentación API | springdoc-openapi | Genera el contrato OpenAPI y Swagger UI a partir del código. |
 | **Seguridad** | Spring Security, JJWT, BCrypt | Registro/login, emisión y validación de JWT, API sin estado, CORS. |
 | **Módulo `profile`** | PDFBox + `LlmGateway` | Extrae el texto del CV y lo estructura en un perfil editable. |
@@ -429,7 +436,7 @@ flowchart LR
 | **Subida de ficheros** | Solo se aceptan PDF de hasta 5 MB; se comprueba el tipo MIME y la firma `%PDF`. El fichero no se guarda en disco: se extrae su texto y se descarta. |
 | **Mitigación de *prompt injection*** | El texto del CV y de la oferta se envía delimitado y marcado como *datos* en el prompt de sistema. El modelo no tiene herramientas ni acceso a nada. Su respuesta se valida contra un esquema estricto antes de usarla, y la puntuación la calcula Java, no el modelo. |
 | **Sin SSRF** | El backend nunca descarga la URL que introduce el usuario; solo la guarda como texto. |
-| **Límite de peticiones** | Los endpoints que llaman al LLM tienen un límite por usuario (por ejemplo, 30 peticiones por hora) con Bucket4j. Si se supera, se responde `429`. Esto protege del abuso y controla el coste. |
+| **Límite de peticiones** | Única fuente de verdad del límite de uso de la IA. Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. |
 | **CORS** | Solo se permite el origen del frontend (`CORS_ALLOWED_ORIGINS`). |
 | **Gestión de secretos** | Variables de entorno; `.env` está en `.gitignore` y `.env.example` va con los valores vacíos. |
 | **Errores seguros** | Manejador global (`@RestControllerAdvice`) que devuelve `ProblemDetail` sin trazas internas. |
@@ -444,17 +451,18 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 
 - `MatchScoreCalculatorTest`: tests parametrizados de la fórmula. Todo cumplido → 100; sin deseables → solo cuentan los obligatorios; mezcla de CUMPLE/PARCIAL/NO_CUMPLE → valor esperado; requisito obligatorio sin cumplir → aviso de bloqueante.
 - `ApplicationStatusPolicyTest`: transiciones permitidas (`GUARDADA→ENVIADA`, `ENTREVISTA→OFERTA`, `OFERTA→DESCARTADA`, cualquier estado → `DESCARTADA`, `DESCARTADA→GUARDADA`) y prohibidas (retrocesos como `OFERTA→GUARDADA` y saltos como `GUARDADA→OFERTA`).
-- `OfferExtractionParserTest`: parseo de respuestas simuladas del LLM (válida, con campos que faltan, con JSON roto → reintento → `LlmResponseInvalidException`).
+- `OfferExtractionParserTest`: parseo de respuestas simuladas del LLM (válida, con campos que faltan, con JSON roto → reintento → `LlmInvalidResponseException`).
 - `CvTextExtractorTest`: extracción de texto de PDFs de prueba; un PDF corrupto o escaneado sin texto devuelve un error controlado.
 - Frontend: `MatchScoreBadge` (colores por rango), formulario de oferta (validación de longitud) y `KanbanBoard` (renderiza columnas y tarjetas, y llama a la mutación al soltar una tarjeta).
 
 **Integración (Spring Boot Test + Testcontainers + MockMvc)**
 
 - Las migraciones de Flyway se aplican sobre un PostgreSQL 16 real y se validan las restricciones (unicidad, `CHECK`, borrado en cascada).
-- `OfferControllerIT`: `POST /offers` con `FakeLlmGateway` → 201, oferta y requisitos guardados; texto demasiado corto → 400; sin token → 401.
+- `OfferControllerIT`: `POST /offers` con `FakeLlmGateway` → 201, oferta y requisitos guardados; el LLM falla → 201 con `extractionStatus: FALLIDA` y el texto guardado; `POST /offers/{id}/extraction` sobre una oferta FALLIDA → 200 con requisitos nuevos, y sobre una COMPLETADA → 409; texto demasiado corto → 400; sin token → 401.
+- `LlmErrorMappingIT`: timeout del LLM → 504; concurrencia agotada → 503 con `Retry-After`; respuesta no válida dos veces → 502.
 - `AnalysisControllerIT`: análisis de punta a punta API → servicio → BD con una puntuación esperada exacta; usuario sin perfil → 409.
 - `OwnershipIT`: el usuario A no puede leer, analizar ni mover recursos del usuario B (→ 404).
-- `ApplicationControllerIT`: cambio de estado válido → 200 y se registra en el historial; transición no permitida → 409.
+- `ApplicationControllerIT`: crear candidatura → 201 en GUARDADA con historial `from = NULL`, y crearla de nuevo para la misma oferta → 409; cambio de estado válido → 200 y se registra en el historial; mismo estado en `PATCH /status` → 400; transición no permitida → 409; `PATCH /applications/{id}` con una `version` antigua → 409.
 
 **E2E (Playwright for Java contra `docker-compose.e2e.yml` con `LLM_MODE=fake`)**
 
@@ -488,7 +496,7 @@ erDiagram
 
     USERS {
         uuid id PK
-        varchar email UK "NOT NULL, max 254"
+        varchar email UK "NOT NULL, max 254, CHECK email = lower(email)"
         varchar password_hash "NOT NULL, BCrypt"
         varchar full_name "NOT NULL, max 120"
         timestamptz created_at "NOT NULL"
@@ -502,8 +510,8 @@ erDiagram
         text summary
         smallint years_experience "CHECK 0-60"
         varchar location "max 120"
-        jsonb languages "lista idioma + nivel"
-        jsonb education "lista titulación + centro + año"
+        jsonb languages "NOT NULL, array JSON idioma + nivel"
+        jsonb education "NOT NULL, array JSON titulación + centro + año"
         varchar cv_file_name "max 255"
         text cv_raw_text "texto extraído del PDF"
         timestamptz created_at "NOT NULL"
@@ -513,7 +521,7 @@ erDiagram
     PROFILE_SKILLS {
         uuid id PK
         uuid profile_id FK "NOT NULL"
-        varchar name "NOT NULL, max 80"
+        varchar name "NOT NULL, max 80, único por perfil sin distinguir mayúsculas"
         varchar level "BASICO | INTERMEDIO | AVANZADO"
         smallint years "CHECK >= 0"
     }
@@ -531,23 +539,23 @@ erDiagram
 
     JOB_OFFERS {
         uuid id PK
-        uuid user_id FK "NOT NULL"
+        uuid user_id FK "NOT NULL, UK (id, user_id)"
         varchar title "max 160"
         varchar company "max 120"
         varchar location "max 120"
         varchar work_mode "REMOTO | HIBRIDO | PRESENCIAL | DESCONOCIDO"
         integer salary_min "CHECK >= 0"
-        integer salary_max "CHECK >= salary_min"
-        char currency "ISO 4217, 3 letras"
+        integer salary_max "CHECK >= 0 y >= salary_min"
+        varchar currency "ISO 4217, obligatoria si hay salario"
         varchar source_url "max 2048"
         text raw_text "NOT NULL, 200-20000 chars"
-        varchar extraction_status "PENDIENTE | COMPLETADA | FALLIDA"
+        varchar extraction_status "NOT NULL, PENDIENTE | COMPLETADA | FALLIDA"
         timestamptz created_at "NOT NULL"
     }
 
     OFFER_REQUIREMENTS {
         uuid id PK
-        uuid offer_id FK "NOT NULL"
+        uuid offer_id FK "NOT NULL, UK (offer_id, id)"
         varchar description "NOT NULL, max 300"
         varchar type "OBLIGATORIO | DESEABLE"
         varchar category "TECNICO | IDIOMA | EXPERIENCIA | FORMACION | OTRO"
@@ -556,12 +564,12 @@ erDiagram
 
     MATCH_ANALYSES {
         uuid id PK
-        uuid offer_id FK "NOT NULL"
+        uuid offer_id FK "NOT NULL, UK (offer_id, id)"
         uuid profile_id FK "NOT NULL"
         smallint score "NOT NULL, CHECK 0-100"
         boolean has_blocking_gap "NOT NULL"
         text summary
-        jsonb suggestions "lista de strings"
+        jsonb suggestions "NOT NULL, array JSON de strings"
         varchar llm_model "NOT NULL"
         timestamptz created_at "NOT NULL"
     }
@@ -570,6 +578,7 @@ erDiagram
         uuid id PK
         uuid analysis_id FK "NOT NULL"
         uuid requirement_id FK "NOT NULL"
+        uuid offer_id FK "NOT NULL, misma oferta en análisis y requisito"
         varchar result "CUMPLE | PARCIAL | NO_CUMPLE"
         text evidence
     }
@@ -586,14 +595,14 @@ erDiagram
 
     APPLICATIONS {
         uuid id PK
-        uuid user_id FK "NOT NULL"
+        uuid user_id FK "NOT NULL, = propietario de la oferta"
         uuid offer_id FK,UK "NOT NULL"
         varchar status "GUARDADA | ENVIADA | ENTREVISTA | OFERTA | DESCARTADA"
         integer board_position "NOT NULL, orden en la columna"
         date applied_at
         date follow_up_date
         text notes
-        bigint version "bloqueo optimista"
+        bigint version "NOT NULL, bloqueo optimista"
         timestamptz created_at "NOT NULL"
         timestamptz updated_at "NOT NULL"
     }
@@ -609,14 +618,14 @@ erDiagram
 
 ### **3.2. Descripción de entidades principales:**
 
-> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC. Los borrados se propagan en cascada desde el usuario.
+> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC, con `DEFAULT now()`. Los borrados se propagan en cascada desde el usuario. PostgreSQL no indexa las claves foráneas automáticamente, así que cada FK tiene un índice que empieza por ella (ver [Índices](#índices)). Las restricciones que no caben en un `UNIQUE` normal (unicidad sin distinguir mayúsculas, coherencia entre tablas) se implementan como índices únicos de expresión o como claves foráneas compuestas, y se indican así en las tablas.
 
 #### `users` — Usuario de la aplicación
 
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
 | id | UUID | PK | Identificador. |
-| email | VARCHAR(254) | NOT NULL, UNIQUE (en minúsculas) | Email de acceso. |
+| email | VARCHAR(254) | NOT NULL, UNIQUE, CHECK (email = lower(email)) | Email de acceso. La aplicación lo normaliza a minúsculas antes de guardarlo y de buscarlo; el `CHECK` impide que entre uno sin normalizar y el `UNIQUE` normal sirve para el login. |
 | password_hash | VARCHAR(100) | NOT NULL | Hash BCrypt. |
 | full_name | VARCHAR(120) | NOT NULL | Nombre que aparece en las cartas y CVs. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | Auditoría. |
@@ -633,13 +642,13 @@ Relaciones: 1–0..1 con `profiles`; 1–N con `job_offers` y `applications`.
 | summary | TEXT | | Resumen profesional. |
 | years_experience | SMALLINT | CHECK (0–60) | Años de experiencia totales. |
 | location | VARCHAR(120) | | Ubicación. |
-| languages | JSONB | DEFAULT '[]' | `[{"language":"Inglés","level":"B2"}]`. |
-| education | JSONB | DEFAULT '[]' | `[{"title":"DAW","institution":"…","year":2024}]`. |
+| languages | JSONB | NOT NULL DEFAULT '[]', CHECK (jsonb_typeof(languages) = 'array') | `[{"language":"Inglés","level":"B2"}]`. |
+| education | JSONB | NOT NULL DEFAULT '[]', CHECK (jsonb_typeof(education) = 'array') | `[{"title":"DAW","institution":"…","year":2024}]`. |
 | cv_file_name | VARCHAR(255) | | Nombre del PDF original. |
 | cv_raw_text | TEXT | | Texto extraído; se usa como contexto para el LLM. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
 
-Idiomas y formación se guardan en JSONB porque solo se muestran y se envían como contexto al LLM, nunca se consultan por separado. Las habilidades y experiencias, en cambio, tienen tabla propia porque se editan una a una.
+Idiomas y formación se guardan en JSONB porque solo se muestran y se envían como contexto al LLM, nunca se consultan por separado. Las habilidades y experiencias, en cambio, tienen tabla propia porque se editan una a una. La base de datos solo garantiza que el JSONB es un array; la forma de cada elemento la valida la aplicación (records Java con Bean Validation, mapeados con `@JdbcTypeCode(SqlTypes.JSON)`). Si algún día hiciera falta filtrar por idioma o nivel en SQL, se normalizarían a tabla propia.
 
 #### `profile_skills` — Habilidades del perfil
 
@@ -647,7 +656,7 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 |---|---|---|---|
 | id | UUID | PK | |
 | profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE | |
-| name | VARCHAR(80) | NOT NULL; UNIQUE (profile_id, lower(name)) | Ej. "Spring Boot". |
+| name | VARCHAR(80) | NOT NULL; índice único de expresión `(profile_id, lower(name))` | Ej. "Spring Boot". Se guarda tal como lo escribe el usuario; la unicidad no distingue mayúsculas. |
 | level | VARCHAR(12) | CHECK IN (BASICO, INTERMEDIO, AVANZADO) | |
 | years | SMALLINT | CHECK ≥ 0 | Años de uso. |
 
@@ -668,41 +677,45 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
-| id | UUID | PK | |
+| id | UUID | PK; UNIQUE (id, user_id) | El `UNIQUE (id, user_id)` es el destino de la FK compuesta de `applications`. |
 | user_id | UUID | FK → users.id, NOT NULL, ON DELETE CASCADE; INDEX (user_id, created_at DESC) | |
 | title | VARCHAR(160) | | Puesto extraído. |
 | company | VARCHAR(120) | | |
 | location | VARCHAR(120) | | |
 | work_mode | VARCHAR(12) | CHECK IN (REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO) | |
-| salary_min / salary_max | INTEGER | CHECK ≥ 0; CHECK salary_max ≥ salary_min | Salario bruto anual, si aparece. |
-| currency | CHAR(3) | | ISO 4217 (EUR, USD…). |
+| salary_min / salary_max | INTEGER | CHECK ≥ 0; CHECK de tabla salary_max ≥ salary_min | Salario bruto anual, si aparece. Cualquiera de los dos puede ser NULL. |
+| currency | VARCHAR(3) | CHECK (currency ~ '^[A-Z]{3}$'); CHECK de tabla: obligatoria si hay salario | ISO 4217 (EUR, USD…). `VARCHAR` y no `CHAR(3)`: Hibernate mapea `String` a `varchar` y la validación del esquema falla con `bpchar`. |
 | source_url | VARCHAR(2048) | | Solo como referencia; nunca se descarga. |
 | raw_text | TEXT | NOT NULL, CHECK longitud 200–20000 | Texto original pegado. |
-| extraction_status | VARCHAR(12) | NOT NULL, CHECK IN (PENDIENTE, COMPLETADA, FALLIDA) | Permite reintentar si el LLM falla. |
+| extraction_status | VARCHAR(12) | NOT NULL, CHECK IN (PENDIENTE, COMPLETADA, FALLIDA) | Si el LLM falla, la oferta queda en FALLIDA y se puede reintentar con `POST /offers/{offerId}/extraction`. |
 | created_at | TIMESTAMPTZ | NOT NULL | |
+
+Restricción de tabla para la moneda: `CHECK ((salary_min IS NULL AND salary_max IS NULL) OR currency IS NOT NULL)`.
 
 #### `offer_requirements` — Requisitos de la oferta
 
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
-| id | UUID | PK | |
+| id | UUID | PK; UNIQUE (offer_id, id) | El `UNIQUE (offer_id, id)` es el destino de la FK compuesta de `requirement_matches` y además sirve de índice de `offer_id`. |
 | offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE | |
 | description | VARCHAR(300) | NOT NULL | Ej. "3+ años con Spring Boot". |
 | type | VARCHAR(12) | NOT NULL, CHECK IN (OBLIGATORIO, DESEABLE) | |
 | category | VARCHAR(12) | NOT NULL, CHECK IN (TECNICO, IDIOMA, EXPERIENCIA, FORMACION, OTRO) | |
 | sort_order | SMALLINT | NOT NULL | |
 
+Al reintentar la extracción de una oferta se borran sus requisitos **y sus análisis** en la misma transacción, para que ningún análisis quede con el detalle a medias por el borrado en cascada de `requirement_matches`.
+
 #### `match_analyses` — Análisis de encaje perfil ↔ oferta
 
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
-| id | UUID | PK | |
-| offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE | Se guarda un histórico; la UI muestra el más reciente. |
-| profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE | |
+| id | UUID | PK; UNIQUE (offer_id, id) | El `UNIQUE (offer_id, id)` es el destino de la FK compuesta de `requirement_matches`. |
+| offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE; INDEX (offer_id, created_at DESC) | Se guarda un histórico; la UI muestra el más reciente. |
+| profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE; INDEX (profile_id) | |
 | score | SMALLINT | NOT NULL, CHECK 0–100 | Calculado por `MatchScoreCalculator`. |
 | has_blocking_gap | BOOLEAN | NOT NULL | Algún requisito obligatorio sin cumplir. |
 | summary | TEXT | | Resumen breve del encaje. |
-| suggestions | JSONB | NOT NULL DEFAULT '[]' | 3–5 sugerencias accionables. |
+| suggestions | JSONB | NOT NULL DEFAULT '[]', CHECK (jsonb_typeof(suggestions) = 'array') | 3–5 sugerencias accionables (el número lo valida la aplicación). |
 | llm_model | VARCHAR(80) | NOT NULL | Modelo usado (trazabilidad). |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
@@ -711,10 +724,20 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
 | id | UUID | PK | |
-| analysis_id | UUID | FK → match_analyses.id, NOT NULL, ON DELETE CASCADE | |
-| requirement_id | UUID | FK → offer_requirements.id, NOT NULL, ON DELETE CASCADE; UNIQUE (analysis_id, requirement_id) | |
+| analysis_id | UUID | NOT NULL; UNIQUE (analysis_id, requirement_id) | |
+| requirement_id | UUID | NOT NULL; INDEX (offer_id, requirement_id) | |
+| offer_id | UUID | NOT NULL | Columna redundante a propósito: es la que obliga a que análisis y requisito sean de la misma oferta. |
 | result | VARCHAR(10) | NOT NULL, CHECK IN (CUMPLE, PARCIAL, NO_CUMPLE) | |
 | evidence | TEXT | | Fragmento del perfil que lo justifica. |
+
+Coherencia con la oferta mediante dos claves foráneas compuestas que comparten `offer_id`:
+
+```sql
+FOREIGN KEY (offer_id, analysis_id)    REFERENCES match_analyses (offer_id, id)     ON DELETE CASCADE,
+FOREIGN KEY (offer_id, requirement_id) REFERENCES offer_requirements (offer_id, id) ON DELETE CASCADE
+```
+
+Como `offer_id` es `NOT NULL` y es la misma columna en las dos FKs, es imposible guardar un resultado que apunte a un requisito de otra oferta. En JPA, `analysisId`, `requirementId` y `offerId` se mapean como columnas `UUID` normales (la entidad se crea siempre desde el análisis, que aporta el `offerId`), y las asociaciones `@ManyToOne`, si se usan, son de solo lectura (`insertable = false, updatable = false`).
 
 #### `generated_documents` — Carta y CV adaptado
 
@@ -724,7 +747,7 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 | offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE | |
 | type | VARCHAR(12) | NOT NULL, CHECK IN (CARTA, CV_ADAPTADO) | |
 | content_markdown | TEXT | NOT NULL | Contenido editable. |
-| version | SMALLINT | NOT NULL, ≥ 1; UNIQUE (offer_id, type, version) | Cada edición o regeneración crea una versión nueva. |
+| version | SMALLINT | NOT NULL, CHECK ≥ 1; UNIQUE (offer_id, type, version) | Cada edición o regeneración crea una versión nueva. La última se obtiene con `ORDER BY version DESC LIMIT 1` sobre este mismo índice. |
 | edited_by_user | BOOLEAN | NOT NULL DEFAULT false | Distingue lo generado de lo editado a mano. |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
@@ -733,14 +756,14 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
 | id | UUID | PK | |
-| user_id | UUID | FK → users.id, NOT NULL, ON DELETE CASCADE; INDEX (user_id, status, board_position) | |
-| offer_id | UUID | FK → job_offers.id, NOT NULL, UNIQUE, ON DELETE CASCADE | Una candidatura por oferta. |
+| user_id | UUID | FK → users.id, NOT NULL, ON DELETE CASCADE; INDEX (user_id, status, board_position) | Redundante con el propietario de la oferta; la FK compuesta de abajo garantiza que coinciden. |
+| offer_id | UUID | NOT NULL, UNIQUE; FK compuesta (offer_id, user_id) → job_offers (id, user_id), ON DELETE CASCADE | Una candidatura por oferta, y siempre del mismo usuario que la oferta. |
 | status | VARCHAR(12) | NOT NULL DEFAULT 'GUARDADA', CHECK IN (GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA) | Columna del kanban. |
-| board_position | INTEGER | NOT NULL | Orden dentro de la columna. |
-| applied_at | DATE | | Se rellena al pasar a ENVIADA. |
-| follow_up_date | DATE | | Si es anterior a hoy, la tarjeta se marca como vencida. |
+| board_position | INTEGER | NOT NULL, CHECK ≥ 0 | Orden dentro de la columna. No es único (reordenar exigiría una restricción diferida); en caso de empate se ordena por `created_at`. |
+| applied_at | DATE | CHECK (status NOT IN ('ENVIADA','ENTREVISTA','OFERTA') OR applied_at IS NOT NULL) | Se rellena al pasar a ENVIADA. |
+| follow_up_date | DATE | | Si es anterior a hoy, la tarjeta se marca como vencida (se calcula en la consulta, no se guarda). |
 | notes | TEXT | | |
-| version | BIGINT | NOT NULL | `@Version` para el bloqueo optimista. |
+| version | BIGINT | NOT NULL DEFAULT 0 | `@Version` para el bloqueo optimista. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
 
 #### `application_status_history` — Historial de estados
@@ -748,36 +771,86 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 | Atributo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
 | id | UUID | PK | |
-| application_id | UUID | FK → applications.id, NOT NULL, ON DELETE CASCADE | |
-| from_status | VARCHAR(12) | NULL en la creación | |
-| to_status | VARCHAR(12) | NOT NULL | |
+| application_id | UUID | FK → applications.id, NOT NULL, ON DELETE CASCADE; INDEX (application_id, changed_at) | |
+| from_status | VARCHAR(12) | NULL en la creación; CHECK IN (mismos valores que `applications.status`) | |
+| to_status | VARCHAR(12) | NOT NULL, CHECK IN (mismos valores que `applications.status`); CHECK (from_status IS DISTINCT FROM to_status) | |
 | changed_at | TIMESTAMPTZ | NOT NULL | |
+
+Las transiciones permitidas no se expresan en la base de datos (necesitarían un *trigger*); las aplica `ApplicationStatusPolicy` en Java.
+
+#### Índices
+
+| Tabla | Índice | Consulta a la que sirve |
+|---|---|---|
+| `users` | UNIQUE (email) | Login. |
+| `profiles` | UNIQUE (user_id) | Perfil del usuario; FK. |
+| `profile_skills` | UNIQUE (profile_id, lower(name)) | Unicidad sin distinguir mayúsculas; FK. |
+| `experiences` | (profile_id, sort_order) | Cargar el perfil ordenado; FK. |
+| `job_offers` | (user_id, created_at DESC) | **Dashboard:** ofertas del usuario, más recientes primero. |
+| `job_offers` | UNIQUE (id, user_id) | Destino de la FK compuesta de `applications`. |
+| `offer_requirements` | UNIQUE (offer_id, id) | Requisitos de una oferta; FK; destino de la FK compuesta. |
+| `match_analyses` | (offer_id, created_at DESC) | **Dashboard y tablero:** último análisis (puntuación) de cada oferta. |
+| `match_analyses` | (profile_id) | Borrado en cascada del perfil. |
+| `match_analyses` | UNIQUE (offer_id, id) | Destino de la FK compuesta de `requirement_matches`. |
+| `requirement_matches` | UNIQUE (analysis_id, requirement_id) | Detalle de un análisis; FK al análisis. |
+| `requirement_matches` | (offer_id, requirement_id) | Borrado en cascada desde un requisito. |
+| `generated_documents` | UNIQUE (offer_id, type, version) | Última versión de cada documento; FK. |
+| `applications` | UNIQUE (offer_id) | Una candidatura por oferta; FK compuesta. |
+| `applications` | (user_id, status, board_position) | **Tablero:** candidaturas por columna y en orden. |
+| `application_status_history` | (application_id, changed_at) | Historial de una candidatura; FK. |
+
+Consulta del dashboard (la puntuación es la del último análisis de cada oferta):
+
+```sql
+SELECT o.id, o.title, o.company, o.created_at, a.score, a.has_blocking_gap
+FROM job_offers o
+LEFT JOIN LATERAL (
+    SELECT score, has_blocking_gap
+    FROM match_analyses
+    WHERE offer_id = o.id
+    ORDER BY created_at DESC
+    LIMIT 1
+) a ON true
+WHERE o.user_id = :userId
+ORDER BY o.created_at DESC;
+```
+
+El tablero usa el mismo `LATERAL` sobre `applications` filtrado por `user_id` y ordenado por `status, board_position`.
 
 ---
 
 ## 4. Especificación de la API
 
-API REST con versión en la ruta (`/api/v1`), JSON, autenticación Bearer JWT y errores en formato **RFC 7807** (`application/problem+json`). El contrato completo se generará con springdoc-openapi y estará en Swagger UI.
+API REST con versión en la ruta (`/api/v1`), JSON, autenticación Bearer JWT y errores en formato **RFC 9457** (`application/problem+json`). El contrato completo se generará con springdoc-openapi y estará en Swagger UI.
 
 **Resumen de endpoints del MVP**
 
-| Método | Ruta | Funcionalidad |
-|---|---|---|
-| POST | `/auth/register` · `/auth/login` | Autenticación |
-| POST | `/profile/cv` (multipart) | F1 — Subir CV y extraer el perfil |
-| GET · PUT | `/profile` | F1 — Consultar / editar el perfil |
-| POST | `/offers` | **F2 — Importar oferta** ⭐ |
-| GET | `/offers` · `/offers/{offerId}` | F2 — Listar / ver detalle |
-| POST | `/offers/{offerId}/analysis` | **F3 — Calcular el análisis de encaje** ⭐ |
-| GET | `/offers/{offerId}/analysis` | F3 — Último análisis |
-| POST | `/offers/{offerId}/documents` | F4 — Generar carta o CV adaptado |
-| PUT | `/documents/{documentId}` | F4 — Guardar la edición (nueva versión) |
-| GET | `/documents/{documentId}/pdf` | F4 — Exportar a PDF |
-| GET · POST | `/applications` | F5 — Tablero / crear candidatura |
-| PATCH | `/applications/{applicationId}` | F5 — Notas, fechas, posición |
-| PATCH | `/applications/{applicationId}/status` | **F5 — Cambiar de columna** ⭐ |
+Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 
-⭐ Endpoints principales detallados a continuación.
+**Errores de IA** (endpoints marcados con 🤖): `429` límite por usuario superado · `502` `LlmInvalidResponse` (respuesta no válida tras un reintento) · `503` `LlmOverloaded` (concurrencia agotada o proveedor saturado, con `Retry-After`) · `504` `LlmTimeout`.
+
+| Método | Ruta | Cuerpo | Respuesta OK | Otros errores | Funcionalidad |
+|---|---|---|---|---|---|
+| POST | `/auth/register` · `/auth/login` | email, password (+ fullName en registro) | 201 / 200 con JWT | 400, 401, 409 (email ya registrado) | Autenticación |
+| POST | `/profile/cv` 🤖 | multipart (`file`, PDF ≤ 5 MB) | 200 `CvDraftResponse`. Guarda `cv_raw_text` y `cv_file_name` y devuelve el **borrador** del perfil, **sin guardarlo** | 400, 415 | F1 — Subir CV y obtener el borrador |
+| GET | `/profile` | — | 200 `ProfileResponse` | 404 (aún no hay perfil) | F1 — Consultar el perfil |
+| PUT | `/profile` | `ProfileRequest` | **201** la primera vez (crea el perfil, sirve también para el perfil hecho a mano) · **200** después (lo reemplaza) | 400 | F1 — Guardar el perfil revisado |
+| POST | `/offers` ⭐ | `CreateOfferRequest` | **201** `OfferResponse` siempre que el texto sea válido. Si la IA falla, la oferta se guarda con `extractionStatus: FALLIDA` | 400, 429 | **F2 — Importar oferta** |
+| POST | `/offers/{offerId}/extraction` 🤖 | — | 200 `OfferResponse`. Reintenta la extracción y borra los requisitos y análisis anteriores en una sola transacción | 404, 409 (la oferta ya está COMPLETADA) | F2 — Reintentar la extracción |
+| GET | `/offers` | — | 200 `OfferSummary[]` (incluye `latestScore`, `hasBlockingGap` y `applicationStatus`) | — | F2 — Dashboard |
+| GET | `/offers/{offerId}` | — | 200 `OfferResponse` | 404 | F2 — Detalle |
+| POST | `/offers/{offerId}/analysis` ⭐ 🤖 | — | 201 `AnalysisResponse` | 404, 409 | **F3 — Calcular el encaje** |
+| GET | `/offers/{offerId}/analysis` | — | 200 `AnalysisResponse` (el más reciente) | 404 | F3 — Último análisis |
+| POST | `/offers/{offerId}/documents` 🤖 | `CreateDocumentRequest` `{type}` | 201 `DocumentResponse` (versión nueva generada por la IA) | 404, 409 (no hay análisis) | F4 — Generar carta o CV adaptado |
+| GET | `/offers/{offerId}/documents?type=CARTA\|CV_ADAPTADO` | — | 200 `DocumentHistoryResponse` (última versión completa + lista de versiones) | 404 | F4 — Ver el documento y su historial |
+| POST | `/documents/{documentId}/versions` | `CreateDocumentVersionRequest` `{contentMarkdown}` | 201 `DocumentResponse` con id nuevo y `editedByUser: true` | 404, 409 (otra edición ha creado esa versión antes) | F4 — Guardar la edición como versión nueva |
+| GET | `/documents/{documentId}/pdf` | — | 200 `application/pdf` (generado en el momento) | 404 | F4 — Exportar a PDF |
+| GET | `/applications` | — | 200 `ApplicationResponse[]` | — | F5 — Tablero |
+| POST | `/applications` | `CreateApplicationRequest` `{offerId}` | 201 `ApplicationResponse` en GUARDADA (historial con `from = NULL`) | 404 (la oferta no existe o es de otro usuario), 409 (ya existe) | F5 — Guardar en el tablero |
+| PATCH | `/applications/{applicationId}` | `UpdateApplicationRequest` (`version` obligatoria) | 200 `ApplicationResponse` | 400, 404, 409 (versión antigua) | F5 — Notas, fechas y **orden dentro de la columna** |
+| PATCH | `/applications/{applicationId}/status` ⭐ | `ChangeStatusRequest` | 200 `ApplicationResponse` | 400 (mismo estado), 404, 409 | **F5 — Cambiar de columna** |
+
+⭐ Endpoints principales detallados en OpenAPI a continuación (la plantilla pide un máximo de 3).
 
 ```yaml
 openapi: 3.0.3
@@ -795,6 +868,12 @@ paths:
     post:
       tags: [Offers]
       summary: Importa una oferta y extrae sus requisitos con IA
+      description: >
+        El texto en bruto se guarda siempre. Si la extracción con IA falla
+        (timeout, saturación o respuesta no válida), se responde igualmente 201
+        con extractionStatus FALLIDA y el usuario puede reintentar con
+        POST /offers/{offerId}/extraction. Por eso este endpoint no devuelve
+        códigos 50x.
       operationId: createOffer
       requestBody:
         required: true
@@ -804,7 +883,7 @@ paths:
               $ref: '#/components/schemas/CreateOfferRequest'
       responses:
         '201':
-          description: Oferta creada y requisitos extraídos
+          description: Oferta creada (requisitos extraídos, o extractionStatus FALLIDA si la IA ha fallado)
           headers:
             Location:
               schema: { type: string, example: /api/v1/offers/7c1e6a52-3b8f-4d0a-9a51-0f2c7f1d9b10 }
@@ -815,7 +894,6 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
-        '502': { $ref: '#/components/responses/LlmUnavailable' }
 
   /offers/{offerId}/analysis:
     post:
@@ -839,7 +917,9 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
-        '502': { $ref: '#/components/responses/LlmUnavailable' }
+        '502': { $ref: '#/components/responses/LlmInvalidResponse' }
+        '503': { $ref: '#/components/responses/LlmOverloaded' }
+        '504': { $ref: '#/components/responses/LlmTimeout' }
 
   /applications/{applicationId}/status:
     patch:
@@ -864,7 +944,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApplicationResponse'
-        '400': { $ref: '#/components/responses/ValidationError' }
+        '400':
+          description: >
+            Datos no válidos, o el estado pedido es el mismo que el actual. Para
+            reordenar dentro de la misma columna se usa PATCH /applications/{applicationId}.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -915,7 +1001,10 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        title: { type: string }
+        title:
+          type: string
+          nullable: true
+          description: null si la extracción está PENDIENTE o FALLIDA
         company: { type: string, nullable: true }
         location: { type: string, nullable: true }
         workMode: { type: string, enum: [REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO] }
@@ -976,7 +1065,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         offerId: { type: string, format: uuid }
-        offerTitle: { type: string }
+        offerTitle: { type: string, nullable: true }
         company: { type: string, nullable: true }
         score: { type: integer, nullable: true }
         status: { type: string, enum: [GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA] }
@@ -986,6 +1075,145 @@ components:
         followUpOverdue: { type: boolean }
         notes: { type: string, nullable: true }
         version: { type: integer, format: int64 }
+
+    CreateApplicationRequest:
+      type: object
+      required: [offerId]
+      properties:
+        offerId: { type: string, format: uuid }
+
+    UpdateApplicationRequest:
+      type: object
+      required: [version]
+      description: Campos opcionales; solo se modifican los que se envían. Sirve también para reordenar dentro de la columna.
+      properties:
+        notes: { type: string, nullable: true, maxLength: 5000 }
+        appliedAt: { type: string, format: date, nullable: true }
+        followUpDate: { type: string, format: date, nullable: true }
+        boardPosition: { type: integer, minimum: 0 }
+        version:
+          type: integer
+          format: int64
+          description: Versión actual (bloqueo optimista)
+
+    OfferSummary:
+      type: object
+      description: Elemento del dashboard (GET /offers)
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, nullable: true }
+        company: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        extractionStatus: { type: string, enum: [PENDIENTE, COMPLETADA, FALLIDA] }
+        latestScore: { type: integer, minimum: 0, maximum: 100, nullable: true }
+        hasBlockingGap: { type: boolean, nullable: true }
+        applicationStatus:
+          type: string
+          nullable: true
+          enum: [GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA]
+
+    Skill:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 80 }
+        level: { type: string, nullable: true, enum: [BASICO, INTERMEDIO, AVANZADO] }
+        years: { type: integer, minimum: 0, nullable: true }
+
+    Experience:
+      type: object
+      required: [company, role, startDate]
+      properties:
+        company: { type: string, maxLength: 120 }
+        role: { type: string, maxLength: 120 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date, nullable: true, description: null = puesto actual }
+        description: { type: string, nullable: true }
+
+    ProfileRequest:
+      type: object
+      description: Perfil completo que se guarda con PUT /profile (reemplaza el anterior)
+      properties:
+        headline: { type: string, maxLength: 160, nullable: true }
+        summary: { type: string, nullable: true }
+        yearsExperience: { type: integer, minimum: 0, maximum: 60, nullable: true }
+        location: { type: string, maxLength: 120, nullable: true }
+        languages:
+          type: array
+          items:
+            type: object
+            properties:
+              language: { type: string }
+              level: { type: string, example: B2 }
+        education:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              institution: { type: string, nullable: true }
+              year: { type: integer, nullable: true }
+        skills:
+          type: array
+          items: { $ref: '#/components/schemas/Skill' }
+        experiences:
+          type: array
+          description: El orden del array es el orden en que se muestran
+          items: { $ref: '#/components/schemas/Experience' }
+
+    ProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/ProfileRequest'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            cvFileName: { type: string, nullable: true }
+            updatedAt: { type: string, format: date-time }
+
+    CvDraftResponse:
+      allOf:
+        - $ref: '#/components/schemas/ProfileRequest'
+        - type: object
+          description: Borrador extraído por la IA. No se guarda como perfil hasta que el usuario lo confirma con PUT /profile.
+          properties:
+            cvFileName: { type: string }
+
+    CreateDocumentRequest:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [CARTA, CV_ADAPTADO] }
+
+    CreateDocumentVersionRequest:
+      type: object
+      required: [contentMarkdown]
+      properties:
+        contentMarkdown: { type: string, minLength: 1, maxLength: 20000 }
+
+    DocumentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [CARTA, CV_ADAPTADO] }
+        version: { type: integer, minimum: 1 }
+        contentMarkdown: { type: string }
+        editedByUser: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    DocumentHistoryResponse:
+      type: object
+      properties:
+        latest: { $ref: '#/components/schemas/DocumentResponse' }
+        versions:
+          type: array
+          description: Todas las versiones, de la más reciente a la más antigua, sin el contenido
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              version: { type: integer }
+              editedByUser: { type: boolean }
+              createdAt: { type: string, format: date-time }
 
     ProblemDetail:
       type: object
@@ -1027,8 +1255,21 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
-    LlmUnavailable:
-      description: El servicio de IA no responde o ha devuelto una respuesta no válida tras reintentar
+    LlmInvalidResponse:
+      description: La IA ha devuelto una respuesta que no cumple el esquema, también tras un reintento
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    LlmOverloaded:
+      description: No hay hueco para más llamadas simultáneas a la IA, o el proveedor está saturado
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    LlmTimeout:
+      description: La IA no ha respondido dentro del tiempo máximo configurado
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -1314,23 +1555,31 @@ Crear la migración inicial de Flyway con todas las tablas del modelo de datos (
 3. Definir para cada tabla:
    - PK `UUID`; FKs con `ON DELETE CASCADE` según la sección 3.2.
    - Enumerados como `VARCHAR` + `CHECK` (por ejemplo, `CHECK (status IN ('GUARDADA','ENVIADA','ENTREVISTA','OFERTA','DESCARTADA'))`).
-   - Restricciones: `UNIQUE (lower(email))` en `users` (índice único funcional); `UNIQUE (user_id)` en `profiles`; `UNIQUE (profile_id, lower(name))` en `profile_skills`; `UNIQUE (offer_id)` en `applications`; `UNIQUE (analysis_id, requirement_id)`; `UNIQUE (offer_id, type, version)`; `CHECK (score BETWEEN 0 AND 100)`; `CHECK (salary_max >= salary_min)`; `CHECK (char_length(raw_text) BETWEEN 200 AND 20000)`; `CHECK (end_date IS NULL OR end_date >= start_date)`.
-   - Índices: `job_offers (user_id, created_at DESC)`, `applications (user_id, status, board_position)`, `match_analyses (offer_id, created_at DESC)` y un índice en cada FK.
-4. Crear `db/seed/R__demo_data.sql` (migración repetible) con: el usuario `demo@jobpilot.dev` (hash BCrypt de `Demo1234!`), un perfil completo con 8 habilidades y 2 experiencias, 3 ofertas con requisitos y análisis (puntuaciones 42, 68 y 85) y 3 candidaturas en GUARDADA, ENVIADA (con seguimiento vencido) y ENTREVISTA. Debe poder ejecutarse varias veces sin duplicar datos (`ON CONFLICT DO NOTHING`).
+   - Restricciones: exactamente las de las tablas de la sección 3.2. Las más delicadas:
+     - `users`: `UNIQUE (email)` + `CHECK (email = lower(email))`; la aplicación normaliza el email antes de guardarlo.
+     - Índice único de expresión `(profile_id, lower(name))` en `profile_skills`.
+     - JSONB con `NOT NULL DEFAULT '[]'` y `CHECK (jsonb_typeof(...) = 'array')`.
+     - `job_offers`: `currency VARCHAR(3)` con `CHECK (currency ~ '^[A-Z]{3}$')` y el `CHECK` de tabla que la hace obligatoria si hay salario.
+     - Claves únicas de destino (`job_offers (id, user_id)`, `offer_requirements (offer_id, id)`, `match_analyses (offer_id, id)`) y las **FKs compuestas** de `applications` y `requirement_matches`.
+     - `applications`: `CHECK (board_position >= 0)` y `applied_at` obligatorio en ENVIADA, ENTREVISTA y OFERTA.
+     - `application_status_history`: `CHECK (from_status IS DISTINCT FROM to_status)`.
+   - Índices: los de la tabla [Índices](#índices) de la sección 3.2 (cada FK tiene un índice que empieza por ella).
+4. Crear `db/seed/R__demo_data.sql` (migración repetible) con: el usuario `demo@jobpilot.dev` (hash BCrypt de `Demo1234!`), un perfil completo con 8 habilidades y 2 experiencias, 3 ofertas con requisitos y análisis (puntuaciones 42, 68 y 85) y 3 candidaturas en GUARDADA, ENVIADA (con seguimiento vencido) y ENTREVISTA. Las dos últimas llevan `applied_at`, que la restricción exige, y el email del usuario va en minúsculas. Debe poder ejecutarse varias veces sin duplicar datos (`ON CONFLICT DO NOTHING`).
 5. Mapear las entidades JPA con `spring.jpa.hibernate.ddl-auto=validate`, de modo que Hibernate falle al arrancar si el código y el esquema no coinciden.
 
 **Criterios de aceptación**
 
 - [ ] `./mvnw spring-boot:run` contra una BD vacía crea el esquema sin errores y Hibernate lo valida.
 - [ ] Con el perfil `dev`, se puede iniciar sesión con las credenciales de prueba y el tablero muestra 3 candidaturas.
-- [ ] Insertar un email duplicado (sin distinguir mayúsculas), una puntuación de 101 o un estado no válido falla por restricción.
+- [ ] Falla por restricción: insertar un email con mayúsculas o duplicado, una puntuación de 101, un estado no válido, un salario sin moneda, una candidatura ENVIADA sin `applied_at` o un historial con el mismo estado de origen y destino.
+- [ ] Falla por FK compuesta: un `requirement_match` cuyo requisito es de otra oferta, o una candidatura cuyo `user_id` no es el propietario de la oferta.
 - [ ] Borrar un usuario elimina en cascada su perfil, ofertas, análisis, documentos y candidaturas.
 - [ ] El perfil `prod` no carga los datos de prueba.
 
 **Tests**
 
 - `SchemaMigrationIT` (Testcontainers con `postgres:16`): aplica las migraciones y comprueba que existen todas las tablas e índices consultando `information_schema`.
-- `ConstraintsIT`: un caso por restricción crítica (se espera `DataIntegrityViolationException`).
+- `ConstraintsIT`: un caso por restricción crítica, incluidos los dos de FK compuesta (se espera `DataIntegrityViolationException`).
 - `CascadeDeleteIT`: borra un usuario y comprueba que quedan 0 filas relacionadas.
 
 **Definición de hecho:** migraciones revisadas, tests en verde en la CI, diagrama de la sección 3 actualizado si ha cambiado algo, PR aprobado.
@@ -1353,7 +1602,7 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
 2. **Integración con la IA** (`ai`)
    - Plantilla `prompts/match.st`: el prompt de sistema define el rol, marca el perfil y la oferta como *datos no confiables* entre delimitadores y exige una salida JSON con `{ matches: [{ requirementId, result, evidence }], summary, suggestions[3..5] }`.
    - Método `LlmGateway.evaluateMatch(ProfileSnapshot, List<RequirementSnapshot>) → MatchEvaluation`.
-   - Validación de la respuesta: todos los `requirementId` existen y no se repiten, ninguno falta, `result` es válido y hay entre 3 y 5 sugerencias. Si no es válida → un reintento → `LlmResponseInvalidException` (→ 502).
+   - Validación de la respuesta: todos los `requirementId` existen y no se repiten, ninguno falta, `result` es válido y hay entre 3 y 5 sugerencias. Si no es válida → un reintento → `LlmInvalidResponseException` (→ 502). Un timeout lanza `LlmTimeoutException` (→ 504), y la concurrencia agotada o el proveedor saturado lanzan `LlmOverloadedException` (→ 503 con `Retry-After`). Un `@RestControllerAdvice` común hace la conversión a `ProblemDetail`.
 3. **Servicio** `MatchAnalysisService.analyze(userId, offerId)`
    - Carga la oferta con `findByIdAndUserId` (si no existe → `NotFoundException` → 404).
    - Comprueba que existe el perfil y que la oferta está `COMPLETADA` con al menos un requisito (si no → `ConflictException` → 409).
@@ -1362,7 +1611,7 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
 4. **Controlador** `AnalysisController`
    - `POST /api/v1/offers/{offerId}/analysis` → 201 + `AnalysisResponse`.
    - `GET /api/v1/offers/{offerId}/analysis` → último análisis o 404.
-   - Límite de peticiones (Bucket4j) compartido con el resto de endpoints de IA → 429.
+   - Límite de peticiones (Bucket4j, 30/h por usuario) y `Semaphore` de 3 llamadas simultáneas, compartidos con el resto de endpoints de IA (ver 2.5) → 429 / 503.
 5. **Fake** — `FakeLlmGateway` devuelve una evaluación fija leída de `fixtures/match-evaluation.json` para los tests de integración y E2E.
 
 **Criterios de aceptación**
@@ -1372,6 +1621,7 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
 - [ ] Un usuario no puede analizar ofertas de otro (404).
 - [ ] Sin perfil → 409 con `type` `.../profile-required`.
 - [ ] Una respuesta del LLM no válida dos veces seguidas → 502 y no se guarda nada.
+- [ ] Timeout del LLM → 504; concurrencia agotada → 503 con cabecera `Retry-After`.
 - [ ] El endpoint aparece documentado en Swagger UI.
 
 **Tests**
@@ -1396,7 +1646,8 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 1. **Ruta y datos**
    - Ruta protegida `/tablero` en React Router.
    - Hook `useApplications()` con TanStack Query (`GET /applications`), agrupando por `status` y ordenando por `boardPosition`.
-   - Hook `useChangeStatus()` (`PATCH /applications/{id}/status`) con actualización optimista: `onMutate` mueve la tarjeta en la caché, `onError` restaura el estado anterior y muestra un *toast*, y `onSettled` invalida la consulta.
+   - Hook `useChangeStatus()` (`PATCH /applications/{id}/status`), **solo para mover entre columnas**, con actualización optimista: `onMutate` mueve la tarjeta en la caché, `onError` restaura el estado anterior y muestra un *toast*, y `onSettled` invalida la consulta.
+   - Hook `useReorderApplication()` (`PATCH /applications/{id}` con `boardPosition` y `version`) para **reordenar dentro de la misma columna**, también con actualización optimista. Así el historial de estados no se llena de filas sin cambio de estado.
 2. **Componentes** (`features/tracker/`)
    - `KanbanBoard`: `DndContext` de dnd-kit con `PointerSensor` y `KeyboardSensor` (accesibilidad).
    - `KanbanColumn`: título, contador de tarjetas y lista ordenable (`SortableContext`).
@@ -1410,6 +1661,7 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 
 - [ ] Se ven 5 columnas con su contador y las tarjetas ordenadas por `boardPosition`.
 - [ ] Al arrastrar de Guardada a Enviada, la tarjeta cambia de columna al instante y el cambio se mantiene al recargar.
+- [ ] Al reordenar dentro de una columna se llama a `PATCH /applications/{id}` (no a `/status`) y no se crea ninguna entrada en el historial.
 - [ ] Si el backend responde 409, la tarjeta vuelve a su sitio y aparece un *toast* con el `detail` del error.
 - [ ] Se puede mover una tarjeta solo con el teclado (Espacio para cogerla, flechas para moverla, Espacio para soltarla).
 - [ ] Las tarjetas con seguimiento vencido muestran el indicador.
