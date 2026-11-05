@@ -15,67 +15,454 @@
 
 ### **0.1. Tu nombre completo:**
 
+Andrés Avellá Navarro
+
 ### **0.2. Nombre del proyecto:**
+
+**JobPilot** — Copiloto de búsqueda de empleo con IA
 
 ### **0.3. Descripción breve del proyecto:**
 
+JobPilot es una aplicación web que ayuda a las personas en búsqueda activa de empleo a postular **mejor y en menos tiempo**. El usuario sube su CV en PDF y la IA lo convierte en un perfil estructurado. Después pega el texto de una oferta de trabajo y el sistema:
+
+1. extrae los requisitos de la oferta (obligatorios y deseables),
+2. calcula una **puntuación de encaje (0–100)** que separa lo que cumple de lo que le falta, con sugerencias concretas,
+3. genera una **carta de presentación** y un **CV adaptado** a esa oferta, editables y exportables a PDF,
+4. registra la candidatura en un **tablero kanban** (Guardada → Enviada → Entrevista → Oferta / Descartada) con fechas de seguimiento.
+
+Stack: **Java 21 + Spring Boot 4** (API REST), **PostgreSQL**, **React + TypeScript** (SPA) y **Claude** (Anthropic) a través de **Spring AI**.
+
 ### **0.4. URL del proyecto:**
 
-> Puede ser pública o privada, en cuyo caso deberás compartir los accesos de manera segura. Puedes enviarlos a [alvaro@lidr.co](mailto:alvaro@lidr.co) usando algún servicio como [onetimesecret](https://onetimesecret.com/).
+> Pendiente. El despliegue es opcional en el máster; si se realiza, se publicará aquí en la Entrega 3 (Render: backend en contenedor Docker + PostgreSQL gestionado + frontend estático). La evidencia de funcionamiento principal será el **acceso al repositorio con credenciales de prueba** y un **vídeo de 2–3 minutos** del flujo principal.
 
 ### 0.5. URL o archivo comprimido del repositorio
 
-> Puedes tenerlo alojado en público o en privado, en cuyo caso deberás compartir los accesos de manera segura. Puedes enviarlos a [alvaro@lidr.co](mailto:alvaro@lidr.co) usando algún servicio como [onetimesecret](https://onetimesecret.com/). También puedes compartir por correo un archivo zip con el contenido
+https://github.com/AndresAvella16/AI4Devs-finalproject
 
+Ramas de entrega:
+
+| Entrega | Rama |
+|---|---|
+| Entrega 1 — Documentación técnica | `feature/entrega-1-aan` |
+| Entrega 2 — Código funcional | `feature/entrega-2-aan` |
+| Entrega 3 — Entrega final | `final-project-aan` |
 
 ---
 
 ## 1. Descripción general del producto
 
-> Describe en detalle los siguientes aspectos del producto:
-
 ### **1.1. Objetivo:**
 
-> Propósito del producto. Qué valor aporta, qué soluciona, y para quién.
+**Problema.** Buscar trabajo es, en sí mismo, un trabajo a tiempo completo. Por cada oferta interesante, el candidato tiene que:
+
+- leerla con detalle y decidir si encaja con su perfil,
+- adaptar su CV para destacar lo que la oferta pide,
+- redactar una carta de presentación específica,
+- recordar en qué estado está cada candidatura y cuándo hacer seguimiento.
+
+Todo esto es manual, repetitivo y acaba disperso entre pestañas del navegador, correos y hojas de cálculo. El resultado: candidaturas genéricas (menor tasa de respuesta), oportunidades olvidadas y mucho tiempo perdido.
+
+**Para quién.** Personas en búsqueda activa de empleo —especialmente perfiles técnicos junior y en transición de carrera— que envían un volumen alto de candidaturas y quieren que cada una esté bien dirigida.
+
+**Qué aporta.**
+
+| Sin JobPilot | Con JobPilot |
+|---|---|
+| Lees la oferta y "calculas a ojo" si encajas | Puntuación 0–100 explicable, requisito a requisito |
+| No sabes qué te falta ni qué destacar | Lista de *gaps* y sugerencias concretas |
+| 30–45 min por carta de presentación | Borrador personalizado en segundos, editable |
+| Un único CV para todo | CV adaptado a cada oferta, exportable a PDF |
+| Excel o memoria para el seguimiento | Kanban con estados, notas y fechas de seguimiento |
+
+**Qué introduce el usuario → qué devuelve el sistema.**
+
+- **Entrada:** su CV en PDF (una vez) y el texto de cada oferta (copiar/pegar).
+- **Salida:** perfil estructurado, requisitos de la oferta, análisis de encaje con puntuación y sugerencias, carta y CV adaptados en PDF, y el estado de todas sus candidaturas en un solo lugar.
 
 ### **1.2. Características y funcionalidades principales:**
 
-> Enumera y describe las características y funcionalidades específicas que tiene el producto para satisfacer las necesidades identificadas.
+#### Must-have (alcance del MVP)
+
+| # | Funcionalidad | Descripción |
+|---|---|---|
+| F1 | **Perfil a partir del CV** | El usuario sube su CV en PDF (máx. 5 MB). El backend extrae el texto con Apache PDFBox y el LLM lo estructura en: titular, resumen, años de experiencia, habilidades (con nivel), experiencias, formación e idiomas. El usuario revisa y edita el perfil antes de guardarlo. |
+| F2 | **Importar oferta** | El usuario pega el texto de una oferta (y opcionalmente su URL como referencia). El LLM extrae: puesto, empresa, ubicación, modalidad (remoto/híbrido/presencial), rango salarial si aparece y la lista de requisitos clasificados como **obligatorios** o **deseables** y por categoría (técnico, idioma, experiencia, formación, otro). |
+| F3 | **Análisis de encaje** | Para cada requisito, el LLM decide si el perfil lo **cumple**, lo cumple **parcialmente** o **no lo cumple**, y aporta la evidencia del CV. La **puntuación se calcula en Java de forma determinista** a partir de esos resultados (ver fórmula abajo), por lo que es reproducible y testeable. Se muestran los *gaps* y 3–5 sugerencias accionables. |
+| F4 | **Carta y CV adaptados** | Genera una carta de presentación y una versión del CV orientada a la oferta, apoyándose en el perfil y en el análisis de encaje. Ambos documentos se editan en la app (Markdown) y se exportan a PDF. Se guarda un historial de versiones. |
+| F5 | **Tablero de candidaturas** | Kanban con las columnas *Guardada → Enviada → Entrevista → Oferta / Descartada*. Las tarjetas se mueven arrastrando, guardan notas, fecha de envío y fecha de seguimiento, y se marcan cuando el seguimiento está vencido. Cada cambio de estado queda registrado en un historial. |
+
+**Fórmula de la puntuación de encaje (F3).** Cada requisito vale `CUMPLE = 1`, `PARCIAL = 0,5`, `NO_CUMPLE = 0`.
+
+```
+puntuación_obligatorios = media de valores de requisitos OBLIGATORIOS
+puntuación_deseables    = media de valores de requisitos DESEABLES
+
+si hay deseables:   score = round(100 × (0,7 × obligatorios + 0,3 × deseables))
+si no hay deseables: score = round(100 × obligatorios)
+```
+
+Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el aviso **"requisito bloqueante"**. Que el LLM *clasifique* y Java *puntúe* es una decisión de diseño deliberada: el número que ve el usuario no depende de la aleatoriedad del modelo y se puede cubrir con tests unitarios.
+
+#### Should-have (deseables, fuera del alcance obligatorio)
+
+| # | Funcionalidad | Descripción |
+|---|---|---|
+| S1 | Preparación de entrevista | Genera preguntas probables para la entrevista a partir de la oferta y de los *gaps* detectados, con pistas de respuesta basadas en el perfil. |
+| S2 | Recordatorios por email | Un job programado (`@Scheduled`) envía un resumen diario con las candidaturas cuyo seguimiento vence ese día. |
+
+#### Fuera de alcance (decisiones explícitas)
+
+- **Scraping de portales de empleo** (LinkedIn, InfoJobs…): sus condiciones de uso lo prohíben y el scraping es frágil. La URL de la oferta solo se guarda como referencia y el contenido se pega a mano.
+- **Envío automático de candidaturas**: el usuario sigue enviando su candidatura en el portal correspondiente; JobPilot prepara y registra.
 
 ### **1.3. Diseño y experiencia de usuario:**
 
-> Proporciona imágenes y/o videotutorial mostrando la experiencia del usuario desde que aterriza en la aplicación, pasando por todas las funcionalidades principales.
+> En la Entrega 1 todavía no hay interfaz implementada. Se documenta el flujo de usuario y las pantallas previstas; las capturas y el vídeo del recorrido completo se añadirán en la Entrega 3.
+
+**Flujo principal de usuario**
+
+```mermaid
+flowchart LR
+    A[Registro / Login] --> B{¿Tiene perfil?}
+    B -- No --> C[Subir CV en PDF]
+    C --> D[Revisar y editar perfil extraído]
+    D --> E
+    B -- Sí --> E[Dashboard de ofertas]
+    E --> F[Pegar nueva oferta]
+    F --> G[Ver requisitos extraídos]
+    G --> H[Análisis de encaje<br/>score + gaps + sugerencias]
+    H --> I[Generar carta y CV adaptado]
+    I --> J[Editar y exportar PDF]
+    J --> K[Guardar en el tablero]
+    K --> L[Kanban de candidaturas]
+```
+
+**Pantallas previstas**
+
+| Pantalla | Contenido principal |
+|---|---|
+| **Login / Registro** | Formulario de email y contraseña, con validación en cliente. |
+| **Onboarding de perfil** | Zona de arrastre para el PDF → indicador de procesamiento → formulario editable con lo que ha extraído la IA (habilidades como *chips*, experiencias como lista). |
+| **Dashboard** | Lista de ofertas importadas con su puntuación de encaje (badge de color: rojo < 50, ámbar 50–74, verde ≥ 75) y botón "Nueva oferta". |
+| **Nueva oferta** | Área de texto grande para pegar la oferta y campo opcional para la URL. |
+| **Detalle de oferta** | Cabecera (puesto, empresa, modalidad, salario), requisitos agrupados en *obligatorios* y *deseables*, panel de análisis (puntuación circular, tabla de requisitos con ✅ / ⚠️ / ❌ y su evidencia, sugerencias) y pestañas "Carta" / "CV adaptado" con editor y botón "Exportar PDF". |
+| **Tablero** | Kanban de 5 columnas con tarjetas arrastrables (puesto, empresa, puntuación, fecha de seguimiento con aviso si está vencida) y un panel lateral para notas y fechas. |
 
 ### **1.4. Instrucciones de instalación:**
-> Documenta de manera precisa las instrucciones para instalar y poner en marcha el proyecto en local (librerías, backend, frontend, servidor, base de datos, migraciones y semillas de datos, etc.)
+
+> Estas instrucciones describen la puesta en marcha prevista; se validarán y actualizarán con el código en las Entregas 2 y 3.
+
+#### Requisitos previos
+
+- **Java 21** (JDK) — el proyecto incluye Maven Wrapper (`./mvnw`), no hace falta instalar Maven.
+- **Node.js 20+** y npm.
+- **Docker** y **Docker Compose** (para PostgreSQL y para los tests de integración con Testcontainers).
+- Una **API key de Anthropic** (opcional: sin ella, la app puede arrancar en modo `fake` con respuestas simuladas del LLM).
+
+#### Variables de entorno (`.env.example`)
+
+```dotenv
+# Base de datos
+POSTGRES_DB=jobpilot
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+DB_URL=jdbc:postgresql://localhost:5432/jobpilot
+
+# Seguridad
+JWT_SECRET=                 # mínimo 32 caracteres aleatorios
+JWT_EXPIRATION_MINUTES=60
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+# IA
+LLM_MODE=fake               # fake | real
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
+
+# Frontend
+VITE_API_BASE_URL=http://localhost:8080/api/v1
+```
+
+#### Opción A — Todo con Docker Compose
+
+```bash
+git clone https://github.com/AndresAvella16/AI4Devs-finalproject.git
+cd AI4Devs-finalproject
+cp .env.example .env        # rellenar los valores
+docker compose up --build
+```
+
+- Frontend: http://localhost:5173
+- API: http://localhost:8080/api/v1
+- Documentación interactiva de la API (Swagger UI): http://localhost:8080/swagger-ui.html
+
+#### Opción B — Desarrollo en local
+
+```bash
+# 1. Base de datos
+docker compose up -d postgres
+
+# 2. Backend (aplica las migraciones Flyway y carga los datos de prueba en el perfil dev)
+cd backend
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+
+# 3. Frontend (en otra terminal)
+cd frontend
+npm ci
+npm run dev
+```
+
+#### Migraciones y datos de prueba (seed)
+
+- Las migraciones están en `backend/src/main/resources/db/migration` (Flyway) y se aplican automáticamente al arrancar.
+- Con el perfil `dev` se carga `db/seed/R__demo_data.sql`, que crea un usuario de prueba con perfil, tres ofertas analizadas y candidaturas en distintas columnas del tablero.
+
+| Credenciales de prueba | |
+|---|---|
+| Email | `demo@jobpilot.dev` |
+| Contraseña | `Demo1234!` |
+
+> Son credenciales ficticias, solo para revisar el proyecto en local. Nunca se suben secretos reales al repositorio.
+
+#### Ejecutar los tests
+
+```bash
+cd backend && ./mvnw verify                # unitarios + integración (Testcontainers)
+cd frontend && npm test                    # unitarios de componentes (Vitest)
+docker compose -f docker-compose.e2e.yml up -d && cd e2e && ./mvnw test   # E2E (Playwright)
+```
 
 ---
 
 ## 2. Arquitectura del Sistema
 
 ### **2.1. Diagrama de arquitectura:**
-> Usa el formato que consideres más adecuado para representar los componentes principales de la aplicación y las tecnologías utilizadas. Explica si sigue algún patrón predefinido, justifica por qué se ha elegido esta arquitectura, y destaca los beneficios principales que aportan al proyecto y justifican su uso, así como sacrificios o déficits que implica.
 
+```mermaid
+flowchart LR
+    U["Usuario<br/>(navegador)"] --> FE
+
+    subgraph FE_BOX["Frontend · SPA"]
+        FE["React + TypeScript + Vite<br/>React Router · TanStack Query · dnd-kit"]
+    end
+
+    FE -- "HTTPS · JSON · JWT Bearer" --> API
+
+    subgraph BE["Backend · Spring Boot 4 · Java 21 (monolito modular)"]
+        SEC["Spring Security<br/>filtro JWT"] -.-> API
+        API["Controladores REST<br/>+ validación DTO"] --> SVC["Servicios de dominio<br/>auth · profile · offer · analysis · document · tracker"]
+        SVC --> REPO["Repositorios<br/>Spring Data JPA"]
+        SVC --> PDFX["CvTextExtractor<br/>Apache PDFBox"]
+        SVC --> PDFG["PdfRenderer<br/>OpenHTMLtoPDF"]
+        SVC --> PORT["LlmGateway<br/>(puerto / interfaz)"]
+        PORT --> REAL["SpringAiLlmGateway<br/>(adaptador real)"]
+        PORT --> FAKE["FakeLlmGateway<br/>(tests · e2e · modo fake)"]
+    end
+
+    REPO --> DB[("PostgreSQL 16<br/>migraciones Flyway")]
+    REAL -- "HTTPS" --> LLM["API de Anthropic<br/>Claude"]
+```
+
+**Patrón elegido: monolito modular en capas + SPA desacoplada.**
+
+- El **backend** es un único despliegue de Spring Boot organizado **por funcionalidad** (*package-by-feature*): `auth`, `profile`, `offer`, `analysis`, `document`, `tracker`. Dentro de cada módulo se respetan las capas clásicas **Controller → Service → Repository**.
+- La integración con la IA aplica una idea de la **arquitectura hexagonal** (puertos y adaptadores) solo donde aporta valor: los servicios dependen de la interfaz `LlmGateway`, no de Spring AI ni de Anthropic. Hay dos implementaciones: la real (`SpringAiLlmGateway`) y una simulada (`FakeLlmGateway`) que devuelve respuestas fijas.
+- El **frontend** es una SPA independiente que solo se comunica con la API REST.
+
+**Por qué esta arquitectura**
+
+- **Adecuada al tamaño del proyecto:** un MVP con 5 funcionalidades y un solo desarrollador no justifica microservicios. Un monolito se desarrolla, testea y despliega con mucha menos complejidad.
+- **Modularidad sin coste operativo:** separar por funcionalidad mantiene el código ordenado y permitiría extraer un módulo (por ejemplo, el de IA) a un servicio aparte si algún día hiciera falta.
+- **Testabilidad del componente no determinista:** el puerto `LlmGateway` permite testear toda la lógica que rodea al LLM (parseo, validación, cálculo de la puntuación, orquestación) con respuestas simuladas, tal como recomienda el máster para sistemas con LLM.
+- **Stack demandado en el mercado:** Spring Boot + React es una de las combinaciones más pedidas en ofertas de desarrollador Java junior, así que el proyecto también funciona como portfolio.
+
+**Beneficios**
+
+- Un solo artefacto de backend: CI/CD y despliegue sencillos.
+- Transacciones ACID locales con PostgreSQL, sin consistencia eventual.
+- Cambiar de proveedor de LLM (o de modelo) solo afecta a un adaptador.
+- Frontend y backend evolucionan y se despliegan por separado.
+
+**Sacrificios / déficits**
+
+- **Escalado conjunto:** no se puede escalar solo la parte de IA (la más costosa en latencia); toda la app escala junta.
+- **Llamadas síncronas al LLM:** la extracción y el análisis tardan varios segundos y se ejecutan dentro de la petición HTTP. Para el MVP es aceptable (la UI muestra un estado de carga); a futuro se podría pasar a procesamiento asíncrono con una cola y *polling* o SSE.
+- **Dependencia de un servicio externo:** si la API del LLM no está disponible, F1–F4 se degradan (se devuelve `502` con un mensaje claro). F5 (tablero) sigue funcionando.
+- **Coste por uso del LLM:** se mitiga limitando las peticiones por usuario y guardando los resultados para no recalcularlos.
 
 ### **2.2. Descripción de componentes principales:**
 
-> Describe los componentes más importantes, incluyendo la tecnología utilizada
+#### Stack tecnológico (resumen)
+
+| Capa | Tecnología | Motivo de la elección |
+|---|---|---|
+| Lenguaje backend | **Java 21** (LTS) | Es el lenguaje que domino; *records*, *pattern matching* y *virtual threads*. |
+| Framework backend | **Spring Boot 4** + Spring Security + Spring Data JPA | Estándar del mercado Java; Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026. |
+| Integración IA | **Spring AI 2.0** (`spring-ai-starter-model-anthropic`) con **Claude** | Abstracción oficial de Spring para LLMs; Spring AI 2.0 requiere Spring Boot 4. |
+| Base de datos | **PostgreSQL 16** + **Flyway** | Relacional, ACID, JSONB para los campos semiestructurados y migraciones versionadas. |
+| Frontend | **React 19** + **TypeScript** + **Vite** | SPA moderna y tipada; React es lo más demandado junto a Java en las ofertas. |
+| UI / estado | Tailwind CSS · TanStack Query · React Hook Form + Zod · dnd-kit | Productividad, caché del servidor, formularios validados y kanban accesible. |
+| Documentos | Apache PDFBox (leer CV) · CommonMark + OpenHTMLtoPDF (generar PDF) | Librerías Java maduras y sin servicios externos. |
+| Tests | JUnit 5 · Mockito · AssertJ · Testcontainers · MockMvc · Vitest · React Testing Library · MSW · Playwright for Java | Cubren unitarios, integración y E2E con el mismo lenguaje en el backend y el E2E. |
+| Infraestructura | Docker · Docker Compose · GitHub Actions · Render (opcional) | Puesta en marcha en local con un comando, CI en cada push y despliegue sencillo. |
+
+
+| Componente | Tecnología | Responsabilidad |
+|---|---|---|
+| **SPA** | React 19, TypeScript, Vite | Interfaz de usuario. Rutas protegidas con React Router. |
+| Estado de servidor | TanStack Query | Caché, reintentos y estados de carga/error de las llamadas a la API. |
+| Formularios | React Hook Form + Zod | Formularios de perfil, oferta y login con validación tipada. |
+| Kanban | dnd-kit | Arrastrar y soltar tarjetas entre columnas, accesible por teclado. |
+| Estilos | Tailwind CSS | Estilos utilitarios y diseño responsive. |
+| **API REST** | Spring Boot 4 (Spring Web), Java 21 | Endpoints `/api/v1/**`, DTOs como `record`, validación con Bean Validation y errores en formato RFC 7807 (`ProblemDetail`). |
+| Documentación API | springdoc-openapi | Genera el contrato OpenAPI y Swagger UI a partir del código. |
+| **Seguridad** | Spring Security, JJWT, BCrypt | Registro/login, emisión y validación de JWT, API sin estado, CORS. |
+| **Módulo `profile`** | PDFBox + `LlmGateway` | Extrae el texto del CV y lo estructura en un perfil editable. |
+| **Módulo `offer`** | `LlmGateway` | Extrae los requisitos de la oferta pegada. |
+| **Módulo `analysis`** | `LlmGateway` + `MatchScoreCalculator` | El LLM clasifica cada requisito; `MatchScoreCalculator` (Java puro, sin dependencias) calcula la puntuación. |
+| **Módulo `document`** | `LlmGateway`, CommonMark, OpenHTMLtoPDF | Genera la carta y el CV adaptado en Markdown, versiona los cambios y exporta a PDF. |
+| **Módulo `tracker`** | Spring Data JPA | Candidaturas, reglas de transición de estado (`ApplicationStatusPolicy`) e historial de cambios. |
+| **Módulo `ai`** | Spring AI (`ChatClient` + salida estructurada) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st`, conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. |
+| **Persistencia** | PostgreSQL 16, Spring Data JPA (Hibernate), Flyway | Modelo relacional, migraciones versionadas y datos de prueba. |
+| **Tests** | JUnit 5, Mockito, AssertJ, Testcontainers, MockMvc, Vitest, React Testing Library, MSW, Playwright for Java | Ver sección 2.6. |
+| **CI** | GitHub Actions | Build, tests y lint en cada push y PR. |
 
 ### **2.3. Descripción de alto nivel del proyecto y estructura de ficheros**
 
-> Representa la estructura del proyecto y explica brevemente el propósito de las carpetas principales, así como si obedece a algún patrón o arquitectura específica.
+Monorepo con tres proyectos: `backend` (Maven), `frontend` (npm) y `e2e` (Maven + Playwright). El backend sigue *package-by-feature* con capas dentro de cada módulo; el frontend se organiza en `features/` con la misma división funcional, de modo que cada historia de usuario se localiza fácilmente en ambos lados.
+
+```
+AI4Devs-finalproject/
+├── backend/
+│   ├── pom.xml
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/jobpilot/
+│       │   │   ├── JobPilotApplication.java
+│       │   │   ├── auth/            # registro, login, JWT (controller, service, dto)
+│       │   │   ├── profile/         # F1: perfil, habilidades, experiencias, CvTextExtractor
+│       │   │   ├── offer/           # F2: ofertas y requisitos
+│       │   │   ├── analysis/        # F3: análisis de encaje, MatchScoreCalculator
+│       │   │   ├── document/        # F4: carta / CV adaptado, PdfRenderer
+│       │   │   ├── tracker/         # F5: candidaturas, ApplicationStatusPolicy, historial
+│       │   │   ├── ai/              # LlmGateway (puerto), SpringAiLlmGateway, FakeLlmGateway
+│       │   │   └── shared/          # config, seguridad, manejo global de errores, auditoría
+│       │   └── resources/
+│       │       ├── application.yml  # + application-dev.yml, application-e2e.yml
+│       │       ├── db/migration/    # V1__init_schema.sql, V2__...
+│       │       ├── db/seed/         # R__demo_data.sql (solo perfil dev)
+│       │       └── prompts/         # extract-cv.st, extract-offer.st, match.st, cover-letter.st
+│       └── test/
+│           ├── java/com/jobpilot/   # unitarios (*Test) e integración (*IT)
+│           └── resources/fixtures/  # CVs de ejemplo y respuestas simuladas del LLM (JSON)
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── app/                     # router, providers, layout
+│       ├── api/                     # cliente HTTP (fetch + interceptor JWT) y tipos
+│       ├── features/
+│       │   ├── auth/
+│       │   ├── profile/
+│       │   ├── offers/
+│       │   ├── analysis/
+│       │   ├── documents/
+│       │   └── tracker/             # tablero kanban
+│       ├── components/              # componentes UI reutilizables
+│       └── test/                    # setup de Vitest y handlers de MSW
+├── e2e/                             # tests E2E con Playwright for Java
+├── docs/                            # diagramas y capturas
+├── .github/workflows/ci.yml
+├── docker-compose.yml
+├── docker-compose.e2e.yml
+├── .env.example
+├── CLAUDE.md                        # contexto y reglas para el asistente de IA
+├── readme.md
+└── prompts.md
+```
 
 ### **2.4. Infraestructura y despliegue**
 
-> Detalla la infraestructura del proyecto, incluyendo un diagrama en el formato que creas conveniente, y explica el proceso de despliegue que se sigue
+**Entorno local y de revisión (obligatorio):** Docker Compose con tres servicios.
+
+```mermaid
+flowchart TB
+    subgraph DEV["Máquina local · docker compose"]
+        FEC["frontend<br/>Nginx sirviendo el build de Vite<br/>:5173"]
+        BEC["backend<br/>eclipse-temurin:21-jre<br/>:8080"]
+        PGC[("postgres:16<br/>:5432<br/>volumen pgdata")]
+        FEC -->|/api/v1| BEC
+        BEC --> PGC
+    end
+    BEC -. "LLM_MODE=real" .-> ANT["API de Anthropic"]
+```
+
+**Pipeline de CI (GitHub Actions)**
+
+```mermaid
+flowchart LR
+    P["push / PR"] --> B1["backend:<br/>./mvnw verify<br/>unit + IT (Testcontainers)"]
+    P --> F1["frontend:<br/>npm ci · lint · test · build"]
+    B1 --> E["e2e:<br/>docker compose (LLM_MODE=fake)<br/>Playwright"]
+    F1 --> E
+    E --> D{"¿rama main?"}
+    D -- sí --> DEP["Deploy (opcional)<br/>Render: deploy hook"]
+```
+
+**Proceso de despliegue (opcional, previsto para la Entrega 3)**
+
+1. Cada push o PR ejecuta el pipeline de CI. Si un test falla, no se despliega.
+2. En `main`, el backend se construye como imagen Docker (build multi-stage: Maven → JRE 21) y se despliega en **Render** como *Web Service*, conectado a un **PostgreSQL gestionado** de Render.
+3. El frontend se despliega como **Static Site** en Render, con `VITE_API_BASE_URL` apuntando al backend.
+4. Las migraciones de Flyway se aplican solas al arrancar el backend.
+5. Los secretos (`JWT_SECRET`, `ANTHROPIC_API_KEY`, credenciales de la BD) se configuran como variables de entorno en Render y nunca se versionan.
+6. El endpoint `/actuator/health` se usa como *health check* del servicio.
 
 ### **2.5. Seguridad**
 
-> Enumera y describe las prácticas de seguridad principales que se han implementado en el proyecto, añadiendo ejemplos si procede
+| Práctica | Implementación |
+|---|---|
+| **Contraseñas** | Hash con BCrypt (coste 12). Nunca se devuelven ni se registran en los logs. Política mínima: 8 caracteres, con letras y números. |
+| **Autenticación sin estado** | JWT firmado con HS256, caducidad de 60 min y secreto de al menos 256 bits leído de una variable de entorno. Se envía en la cabecera `Authorization: Bearer …`. |
+| **Autorización por propietario** | Todas las consultas filtran por el `userId` del token (`findByIdAndUserId`). Si un recurso pertenece a otro usuario se responde `404` (no `403`) para no revelar que existe. Hay tests de integración específicos para esto. |
+| **Validación de entrada** | DTOs con Bean Validation (`@NotBlank`, `@Size`, `@Email`…). Ejemplo: el texto de una oferta debe tener entre 200 y 20.000 caracteres. El frontend valida también con Zod, pero la validación del backend es la que manda. |
+| **Subida de ficheros** | Solo se aceptan PDF de hasta 5 MB; se comprueba el tipo MIME y la firma `%PDF`. El fichero no se guarda en disco: se extrae su texto y se descarta. |
+| **Mitigación de *prompt injection*** | El texto del CV y de la oferta se envía delimitado y marcado como *datos* en el prompt de sistema. El modelo no tiene herramientas ni acceso a nada. Su respuesta se valida contra un esquema estricto antes de usarla, y la puntuación la calcula Java, no el modelo. |
+| **Sin SSRF** | El backend nunca descarga la URL que introduce el usuario; solo la guarda como texto. |
+| **Límite de peticiones** | Los endpoints que llaman al LLM tienen un límite por usuario (por ejemplo, 30 peticiones por hora) con Bucket4j. Si se supera, se responde `429`. Esto protege del abuso y controla el coste. |
+| **CORS** | Solo se permite el origen del frontend (`CORS_ALLOWED_ORIGINS`). |
+| **Gestión de secretos** | Variables de entorno; `.env` está en `.gitignore` y `.env.example` va con los valores vacíos. |
+| **Errores seguros** | Manejador global (`@RestControllerAdvice`) que devuelve `ProblemDetail` sin trazas internas. |
+| **Datos personales** | El CV contiene datos personales: solo se guarda lo necesario (texto extraído y perfil), se borra en cascada al eliminar la cuenta y nunca se envía al LLM nada que no haga falta para la tarea. |
+| **Dependencias** | Dependabot activado para Maven y npm. |
 
 ### **2.6. Tests**
 
-> Describe brevemente algunos de los tests realizados
+La estrategia sigue la pirámide de tests y la recomendación del máster para sistemas con LLM: **los componentes que rodean al modelo se prueban de forma determinista con respuestas simuladas**, y las salidas reales del modelo se validan por estructura y reglas, no comparando el texto exacto.
+
+**Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
+
+- `MatchScoreCalculatorTest`: tests parametrizados de la fórmula. Todo cumplido → 100; sin deseables → solo cuentan los obligatorios; mezcla de CUMPLE/PARCIAL/NO_CUMPLE → valor esperado; requisito obligatorio sin cumplir → aviso de bloqueante.
+- `ApplicationStatusPolicyTest`: transiciones permitidas (`GUARDADA→ENVIADA`, `ENTREVISTA→OFERTA`, `OFERTA→DESCARTADA`, cualquier estado → `DESCARTADA`, `DESCARTADA→GUARDADA`) y prohibidas (retrocesos como `OFERTA→GUARDADA` y saltos como `GUARDADA→OFERTA`).
+- `OfferExtractionParserTest`: parseo de respuestas simuladas del LLM (válida, con campos que faltan, con JSON roto → reintento → `LlmResponseInvalidException`).
+- `CvTextExtractorTest`: extracción de texto de PDFs de prueba; un PDF corrupto o escaneado sin texto devuelve un error controlado.
+- Frontend: `MatchScoreBadge` (colores por rango), formulario de oferta (validación de longitud) y `KanbanBoard` (renderiza columnas y tarjetas, y llama a la mutación al soltar una tarjeta).
+
+**Integración (Spring Boot Test + Testcontainers + MockMvc)**
+
+- Las migraciones de Flyway se aplican sobre un PostgreSQL 16 real y se validan las restricciones (unicidad, `CHECK`, borrado en cascada).
+- `OfferControllerIT`: `POST /offers` con `FakeLlmGateway` → 201, oferta y requisitos guardados; texto demasiado corto → 400; sin token → 401.
+- `AnalysisControllerIT`: análisis de punta a punta API → servicio → BD con una puntuación esperada exacta; usuario sin perfil → 409.
+- `OwnershipIT`: el usuario A no puede leer, analizar ni mover recursos del usuario B (→ 404).
+- `ApplicationControllerIT`: cambio de estado válido → 200 y se registra en el historial; transición no permitida → 409.
+
+**E2E (Playwright for Java contra `docker-compose.e2e.yml` con `LLM_MODE=fake`)**
+
+- **Flujo principal:** registro → subir el CV de ejemplo → revisar el perfil → pegar una oferta de ejemplo → comprobar que se ven los requisitos y la puntuación esperada → generar la carta → exportar el PDF (se verifica la descarga) → guardar en el tablero → arrastrar la tarjeta a "Enviada" → recargar la página y comprobar que se ha guardado.
+
+**Validación con el LLM real (manual / *smoke*, fuera de la CI)**
+
+- Una prueba etiquetada `@Tag("llm-live")` ejecuta la extracción con el modelo real sobre 3 ofertas de ejemplo y valida con criterios flexibles: el JSON cumple el esquema, hay al menos un requisito obligatorio, la modalidad es un valor válido y cada evidencia aparece en el texto del CV.
 
 ---
 
@@ -83,52 +470,974 @@
 
 ### **3.1. Diagrama del modelo de datos:**
 
-> Recomendamos usar mermaid para el modelo de datos, y utilizar todos los parámetros que permite la sintaxis para dar el máximo detalle, por ejemplo las claves primarias y foráneas.
+```mermaid
+erDiagram
+    USERS ||--o| PROFILES : "tiene"
+    PROFILES ||--o{ PROFILE_SKILLS : "incluye"
+    PROFILES ||--o{ EXPERIENCES : "incluye"
+    USERS ||--o{ JOB_OFFERS : "importa"
+    JOB_OFFERS ||--|{ OFFER_REQUIREMENTS : "contiene"
+    JOB_OFFERS ||--o{ MATCH_ANALYSES : "se analiza en"
+    PROFILES ||--o{ MATCH_ANALYSES : "se compara en"
+    MATCH_ANALYSES ||--|{ REQUIREMENT_MATCHES : "detalla"
+    OFFER_REQUIREMENTS ||--o{ REQUIREMENT_MATCHES : "se evalúa en"
+    JOB_OFFERS ||--o{ GENERATED_DOCUMENTS : "genera"
+    USERS ||--o{ APPLICATIONS : "gestiona"
+    JOB_OFFERS ||--o| APPLICATIONS : "se registra como"
+    APPLICATIONS ||--o{ APPLICATION_STATUS_HISTORY : "registra"
 
+    USERS {
+        uuid id PK
+        varchar email UK "NOT NULL, max 254"
+        varchar password_hash "NOT NULL, BCrypt"
+        varchar full_name "NOT NULL, max 120"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    PROFILES {
+        uuid id PK
+        uuid user_id FK,UK "NOT NULL"
+        varchar headline "max 160"
+        text summary
+        smallint years_experience "CHECK 0-60"
+        varchar location "max 120"
+        jsonb languages "lista idioma + nivel"
+        jsonb education "lista titulación + centro + año"
+        varchar cv_file_name "max 255"
+        text cv_raw_text "texto extraído del PDF"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    PROFILE_SKILLS {
+        uuid id PK
+        uuid profile_id FK "NOT NULL"
+        varchar name "NOT NULL, max 80"
+        varchar level "BASICO | INTERMEDIO | AVANZADO"
+        smallint years "CHECK >= 0"
+    }
+
+    EXPERIENCES {
+        uuid id PK
+        uuid profile_id FK "NOT NULL"
+        varchar company "NOT NULL, max 120"
+        varchar role "NOT NULL, max 120"
+        date start_date "NOT NULL"
+        date end_date "NULL = actual"
+        text description
+        smallint sort_order "NOT NULL"
+    }
+
+    JOB_OFFERS {
+        uuid id PK
+        uuid user_id FK "NOT NULL"
+        varchar title "max 160"
+        varchar company "max 120"
+        varchar location "max 120"
+        varchar work_mode "REMOTO | HIBRIDO | PRESENCIAL | DESCONOCIDO"
+        integer salary_min "CHECK >= 0"
+        integer salary_max "CHECK >= salary_min"
+        char currency "ISO 4217, 3 letras"
+        varchar source_url "max 2048"
+        text raw_text "NOT NULL, 200-20000 chars"
+        varchar extraction_status "PENDIENTE | COMPLETADA | FALLIDA"
+        timestamptz created_at "NOT NULL"
+    }
+
+    OFFER_REQUIREMENTS {
+        uuid id PK
+        uuid offer_id FK "NOT NULL"
+        varchar description "NOT NULL, max 300"
+        varchar type "OBLIGATORIO | DESEABLE"
+        varchar category "TECNICO | IDIOMA | EXPERIENCIA | FORMACION | OTRO"
+        smallint sort_order "NOT NULL"
+    }
+
+    MATCH_ANALYSES {
+        uuid id PK
+        uuid offer_id FK "NOT NULL"
+        uuid profile_id FK "NOT NULL"
+        smallint score "NOT NULL, CHECK 0-100"
+        boolean has_blocking_gap "NOT NULL"
+        text summary
+        jsonb suggestions "lista de strings"
+        varchar llm_model "NOT NULL"
+        timestamptz created_at "NOT NULL"
+    }
+
+    REQUIREMENT_MATCHES {
+        uuid id PK
+        uuid analysis_id FK "NOT NULL"
+        uuid requirement_id FK "NOT NULL"
+        varchar result "CUMPLE | PARCIAL | NO_CUMPLE"
+        text evidence
+    }
+
+    GENERATED_DOCUMENTS {
+        uuid id PK
+        uuid offer_id FK "NOT NULL"
+        varchar type "CARTA | CV_ADAPTADO"
+        text content_markdown "NOT NULL"
+        smallint version "NOT NULL, >= 1"
+        boolean edited_by_user "NOT NULL"
+        timestamptz created_at "NOT NULL"
+    }
+
+    APPLICATIONS {
+        uuid id PK
+        uuid user_id FK "NOT NULL"
+        uuid offer_id FK,UK "NOT NULL"
+        varchar status "GUARDADA | ENVIADA | ENTREVISTA | OFERTA | DESCARTADA"
+        integer board_position "NOT NULL, orden en la columna"
+        date applied_at
+        date follow_up_date
+        text notes
+        bigint version "bloqueo optimista"
+        timestamptz created_at "NOT NULL"
+        timestamptz updated_at "NOT NULL"
+    }
+
+    APPLICATION_STATUS_HISTORY {
+        uuid id PK
+        uuid application_id FK "NOT NULL"
+        varchar from_status "NULL en la creación"
+        varchar to_status "NOT NULL"
+        timestamptz changed_at "NOT NULL"
+    }
+```
 
 ### **3.2. Descripción de entidades principales:**
 
-> Recuerda incluir el máximo detalle de cada entidad, como el nombre y tipo de cada atributo, descripción breve si procede, claves primarias y foráneas, relaciones y tipo de relación, restricciones (unique, not null…), etc.
+> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC. Los borrados se propagan en cascada desde el usuario.
+
+#### `users` — Usuario de la aplicación
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | Identificador. |
+| email | VARCHAR(254) | NOT NULL, UNIQUE (en minúsculas) | Email de acceso. |
+| password_hash | VARCHAR(100) | NOT NULL | Hash BCrypt. |
+| full_name | VARCHAR(120) | NOT NULL | Nombre que aparece en las cartas y CVs. |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL | Auditoría. |
+
+Relaciones: 1–0..1 con `profiles`; 1–N con `job_offers` y `applications`.
+
+#### `profiles` — Perfil profesional extraído del CV
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users.id, NOT NULL, UNIQUE, ON DELETE CASCADE | Un perfil por usuario. |
+| headline | VARCHAR(160) | | Titular, p. ej. "Desarrollador Web Junior · Java". |
+| summary | TEXT | | Resumen profesional. |
+| years_experience | SMALLINT | CHECK (0–60) | Años de experiencia totales. |
+| location | VARCHAR(120) | | Ubicación. |
+| languages | JSONB | DEFAULT '[]' | `[{"language":"Inglés","level":"B2"}]`. |
+| education | JSONB | DEFAULT '[]' | `[{"title":"DAW","institution":"…","year":2024}]`. |
+| cv_file_name | VARCHAR(255) | | Nombre del PDF original. |
+| cv_raw_text | TEXT | | Texto extraído; se usa como contexto para el LLM. |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
+
+Idiomas y formación se guardan en JSONB porque solo se muestran y se envían como contexto al LLM, nunca se consultan por separado. Las habilidades y experiencias, en cambio, tienen tabla propia porque se editan una a una.
+
+#### `profile_skills` — Habilidades del perfil
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE | |
+| name | VARCHAR(80) | NOT NULL; UNIQUE (profile_id, lower(name)) | Ej. "Spring Boot". |
+| level | VARCHAR(12) | CHECK IN (BASICO, INTERMEDIO, AVANZADO) | |
+| years | SMALLINT | CHECK ≥ 0 | Años de uso. |
+
+#### `experiences` — Experiencia laboral
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE | |
+| company | VARCHAR(120) | NOT NULL | |
+| role | VARCHAR(120) | NOT NULL | |
+| start_date | DATE | NOT NULL | |
+| end_date | DATE | NULL = puesto actual; CHECK end_date ≥ start_date | |
+| description | TEXT | | Responsabilidades y logros. |
+| sort_order | SMALLINT | NOT NULL | Orden en el que se muestra. |
+
+#### `job_offers` — Oferta de empleo importada
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users.id, NOT NULL, ON DELETE CASCADE; INDEX (user_id, created_at DESC) | |
+| title | VARCHAR(160) | | Puesto extraído. |
+| company | VARCHAR(120) | | |
+| location | VARCHAR(120) | | |
+| work_mode | VARCHAR(12) | CHECK IN (REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO) | |
+| salary_min / salary_max | INTEGER | CHECK ≥ 0; CHECK salary_max ≥ salary_min | Salario bruto anual, si aparece. |
+| currency | CHAR(3) | | ISO 4217 (EUR, USD…). |
+| source_url | VARCHAR(2048) | | Solo como referencia; nunca se descarga. |
+| raw_text | TEXT | NOT NULL, CHECK longitud 200–20000 | Texto original pegado. |
+| extraction_status | VARCHAR(12) | NOT NULL, CHECK IN (PENDIENTE, COMPLETADA, FALLIDA) | Permite reintentar si el LLM falla. |
+| created_at | TIMESTAMPTZ | NOT NULL | |
+
+#### `offer_requirements` — Requisitos de la oferta
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE | |
+| description | VARCHAR(300) | NOT NULL | Ej. "3+ años con Spring Boot". |
+| type | VARCHAR(12) | NOT NULL, CHECK IN (OBLIGATORIO, DESEABLE) | |
+| category | VARCHAR(12) | NOT NULL, CHECK IN (TECNICO, IDIOMA, EXPERIENCIA, FORMACION, OTRO) | |
+| sort_order | SMALLINT | NOT NULL | |
+
+#### `match_analyses` — Análisis de encaje perfil ↔ oferta
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE | Se guarda un histórico; la UI muestra el más reciente. |
+| profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE | |
+| score | SMALLINT | NOT NULL, CHECK 0–100 | Calculado por `MatchScoreCalculator`. |
+| has_blocking_gap | BOOLEAN | NOT NULL | Algún requisito obligatorio sin cumplir. |
+| summary | TEXT | | Resumen breve del encaje. |
+| suggestions | JSONB | NOT NULL DEFAULT '[]' | 3–5 sugerencias accionables. |
+| llm_model | VARCHAR(80) | NOT NULL | Modelo usado (trazabilidad). |
+| created_at | TIMESTAMPTZ | NOT NULL | |
+
+#### `requirement_matches` — Resultado por requisito
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| analysis_id | UUID | FK → match_analyses.id, NOT NULL, ON DELETE CASCADE | |
+| requirement_id | UUID | FK → offer_requirements.id, NOT NULL, ON DELETE CASCADE; UNIQUE (analysis_id, requirement_id) | |
+| result | VARCHAR(10) | NOT NULL, CHECK IN (CUMPLE, PARCIAL, NO_CUMPLE) | |
+| evidence | TEXT | | Fragmento del perfil que lo justifica. |
+
+#### `generated_documents` — Carta y CV adaptado
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| offer_id | UUID | FK → job_offers.id, NOT NULL, ON DELETE CASCADE | |
+| type | VARCHAR(12) | NOT NULL, CHECK IN (CARTA, CV_ADAPTADO) | |
+| content_markdown | TEXT | NOT NULL | Contenido editable. |
+| version | SMALLINT | NOT NULL, ≥ 1; UNIQUE (offer_id, type, version) | Cada edición o regeneración crea una versión nueva. |
+| edited_by_user | BOOLEAN | NOT NULL DEFAULT false | Distingue lo generado de lo editado a mano. |
+| created_at | TIMESTAMPTZ | NOT NULL | |
+
+#### `applications` — Candidatura en el tablero
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users.id, NOT NULL, ON DELETE CASCADE; INDEX (user_id, status, board_position) | |
+| offer_id | UUID | FK → job_offers.id, NOT NULL, UNIQUE, ON DELETE CASCADE | Una candidatura por oferta. |
+| status | VARCHAR(12) | NOT NULL DEFAULT 'GUARDADA', CHECK IN (GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA) | Columna del kanban. |
+| board_position | INTEGER | NOT NULL | Orden dentro de la columna. |
+| applied_at | DATE | | Se rellena al pasar a ENVIADA. |
+| follow_up_date | DATE | | Si es anterior a hoy, la tarjeta se marca como vencida. |
+| notes | TEXT | | |
+| version | BIGINT | NOT NULL | `@Version` para el bloqueo optimista. |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
+
+#### `application_status_history` — Historial de estados
+
+| Atributo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| id | UUID | PK | |
+| application_id | UUID | FK → applications.id, NOT NULL, ON DELETE CASCADE | |
+| from_status | VARCHAR(12) | NULL en la creación | |
+| to_status | VARCHAR(12) | NOT NULL | |
+| changed_at | TIMESTAMPTZ | NOT NULL | |
 
 ---
 
 ## 4. Especificación de la API
 
-> Si tu backend se comunica a través de API, describe los endpoints principales (máximo 3) en formato OpenAPI. Opcionalmente puedes añadir un ejemplo de petición y de respuesta para mayor claridad
+API REST con versión en la ruta (`/api/v1`), JSON, autenticación Bearer JWT y errores en formato **RFC 7807** (`application/problem+json`). El contrato completo se generará con springdoc-openapi y estará en Swagger UI.
+
+**Resumen de endpoints del MVP**
+
+| Método | Ruta | Funcionalidad |
+|---|---|---|
+| POST | `/auth/register` · `/auth/login` | Autenticación |
+| POST | `/profile/cv` (multipart) | F1 — Subir CV y extraer el perfil |
+| GET · PUT | `/profile` | F1 — Consultar / editar el perfil |
+| POST | `/offers` | **F2 — Importar oferta** ⭐ |
+| GET | `/offers` · `/offers/{offerId}` | F2 — Listar / ver detalle |
+| POST | `/offers/{offerId}/analysis` | **F3 — Calcular el análisis de encaje** ⭐ |
+| GET | `/offers/{offerId}/analysis` | F3 — Último análisis |
+| POST | `/offers/{offerId}/documents` | F4 — Generar carta o CV adaptado |
+| PUT | `/documents/{documentId}` | F4 — Guardar la edición (nueva versión) |
+| GET | `/documents/{documentId}/pdf` | F4 — Exportar a PDF |
+| GET · POST | `/applications` | F5 — Tablero / crear candidatura |
+| PATCH | `/applications/{applicationId}` | F5 — Notas, fechas, posición |
+| PATCH | `/applications/{applicationId}/status` | **F5 — Cambiar de columna** ⭐ |
+
+⭐ Endpoints principales detallados a continuación.
+
+```yaml
+openapi: 3.0.3
+info:
+  title: JobPilot API
+  version: 1.0.0
+  description: API del copiloto de búsqueda de empleo JobPilot.
+servers:
+  - url: http://localhost:8080/api/v1
+security:
+  - bearerAuth: []
+
+paths:
+  /offers:
+    post:
+      tags: [Offers]
+      summary: Importa una oferta y extrae sus requisitos con IA
+      operationId: createOffer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOfferRequest'
+      responses:
+        '201':
+          description: Oferta creada y requisitos extraídos
+          headers:
+            Location:
+              schema: { type: string, example: /api/v1/offers/7c1e6a52-3b8f-4d0a-9a51-0f2c7f1d9b10 }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/LlmUnavailable' }
+
+  /offers/{offerId}/analysis:
+    post:
+      tags: [Analysis]
+      summary: Calcula el análisis de encaje entre el perfil del usuario y la oferta
+      operationId: createAnalysis
+      parameters:
+        - $ref: '#/components/parameters/OfferId'
+      responses:
+        '201':
+          description: Análisis calculado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: El usuario no tiene perfil o la oferta no tiene requisitos extraídos
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/LlmUnavailable' }
+
+  /applications/{applicationId}/status:
+    patch:
+      tags: [Applications]
+      summary: Mueve una candidatura a otra columna del tablero
+      operationId: changeApplicationStatus
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeStatusRequest'
+      responses:
+        '200':
+          description: Estado actualizado y registrado en el historial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Transición de estado no permitida o conflicto de versión
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OfferId:
+      name: offerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    CreateOfferRequest:
+      type: object
+      required: [rawText]
+      properties:
+        rawText:
+          type: string
+          minLength: 200
+          maxLength: 20000
+          description: Texto completo de la oferta, copiado del portal
+        sourceUrl:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: URL de referencia (no se descarga)
+
+    Requirement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        description: { type: string }
+        type: { type: string, enum: [OBLIGATORIO, DESEABLE] }
+        category: { type: string, enum: [TECNICO, IDIOMA, EXPERIENCIA, FORMACION, OTRO] }
+
+    OfferResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        company: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        workMode: { type: string, enum: [REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO] }
+        salary:
+          type: object
+          nullable: true
+          properties:
+            min: { type: integer }
+            max: { type: integer }
+            currency: { type: string, example: EUR }
+        sourceUrl: { type: string, nullable: true }
+        extractionStatus: { type: string, enum: [PENDIENTE, COMPLETADA, FALLIDA] }
+        requirements:
+          type: array
+          items: { $ref: '#/components/schemas/Requirement' }
+        createdAt: { type: string, format: date-time }
+
+    RequirementMatch:
+      type: object
+      properties:
+        requirementId: { type: string, format: uuid }
+        description: { type: string }
+        type: { type: string, enum: [OBLIGATORIO, DESEABLE] }
+        result: { type: string, enum: [CUMPLE, PARCIAL, NO_CUMPLE] }
+        evidence: { type: string, nullable: true }
+
+    AnalysisResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        offerId: { type: string, format: uuid }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        hasBlockingGap: { type: boolean }
+        summary: { type: string }
+        matches:
+          type: array
+          items: { $ref: '#/components/schemas/RequirementMatch' }
+        suggestions:
+          type: array
+          items: { type: string }
+          minItems: 3
+          maxItems: 5
+        createdAt: { type: string, format: date-time }
+
+    ChangeStatusRequest:
+      type: object
+      required: [status, boardPosition, version]
+      properties:
+        status: { type: string, enum: [GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA] }
+        boardPosition: { type: integer, minimum: 0 }
+        version:
+          type: integer
+          format: int64
+          description: Versión actual (bloqueo optimista)
+
+    ApplicationResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        offerId: { type: string, format: uuid }
+        offerTitle: { type: string }
+        company: { type: string, nullable: true }
+        score: { type: integer, nullable: true }
+        status: { type: string, enum: [GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA] }
+        boardPosition: { type: integer }
+        appliedAt: { type: string, format: date, nullable: true }
+        followUpDate: { type: string, format: date, nullable: true }
+        followUpOverdue: { type: boolean }
+        notes: { type: string, nullable: true }
+        version: { type: integer, format: int64 }
+
+    ProblemDetail:
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+  responses:
+    ValidationError:
+      description: Datos de entrada no válidos
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    Unauthorized:
+      description: Token ausente, caducado o no válido
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    NotFound:
+      description: El recurso no existe o no pertenece al usuario
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    TooManyRequests:
+      description: Límite de peticiones de IA superado
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    LlmUnavailable:
+      description: El servicio de IA no responde o ha devuelto una respuesta no válida tras reintentar
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+```
+
+#### Ejemplo 1 — `POST /api/v1/offers`
+
+Petición:
+
+```http
+POST /api/v1/offers
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{
+  "rawText": "Buscamos Desarrollador/a Java Junior para nuestro equipo de producto en Valencia (modelo híbrido, 2 días en oficina). Requisitos: experiencia de al menos 1 año con Java y Spring Boot, conocimientos de SQL y PostgreSQL, uso de Git. Se valorará: experiencia con React, Docker y nivel de inglés B2. Ofrecemos 24.000 - 28.000 € brutos anuales...",
+  "sourceUrl": "https://empresa-ejemplo.com/empleo/java-junior"
+}
+```
+
+Respuesta `201 Created`:
+
+```json
+{
+  "id": "7c1e6a52-3b8f-4d0a-9a51-0f2c7f1d9b10",
+  "title": "Desarrollador/a Java Junior",
+  "company": null,
+  "location": "Valencia",
+  "workMode": "HIBRIDO",
+  "salary": { "min": 24000, "max": 28000, "currency": "EUR" },
+  "sourceUrl": "https://empresa-ejemplo.com/empleo/java-junior",
+  "extractionStatus": "COMPLETADA",
+  "requirements": [
+    { "id": "a1…", "description": "Al menos 1 año de experiencia con Java y Spring Boot", "type": "OBLIGATORIO", "category": "EXPERIENCIA" },
+    { "id": "a2…", "description": "Conocimientos de SQL y PostgreSQL", "type": "OBLIGATORIO", "category": "TECNICO" },
+    { "id": "a3…", "description": "Uso de Git", "type": "OBLIGATORIO", "category": "TECNICO" },
+    { "id": "a4…", "description": "Experiencia con React", "type": "DESEABLE", "category": "TECNICO" },
+    { "id": "a5…", "description": "Docker", "type": "DESEABLE", "category": "TECNICO" },
+    { "id": "a6…", "description": "Inglés B2", "type": "DESEABLE", "category": "IDIOMA" }
+  ],
+  "createdAt": "2026-11-04T16:30:12Z"
+}
+```
+
+#### Ejemplo 2 — `POST /api/v1/offers/{offerId}/analysis`
+
+Respuesta `201 Created` (obligatorios: CUMPLE, CUMPLE, CUMPLE → 1,0; deseables: PARCIAL, NO_CUMPLE, CUMPLE → 0,5 · score = round(100 × (0,7 × 1,0 + 0,3 × 0,5)) = **85**):
+
+```json
+{
+  "id": "e3b1f0c4-…",
+  "offerId": "7c1e6a52-3b8f-4d0a-9a51-0f2c7f1d9b10",
+  "score": 85,
+  "hasBlockingGap": false,
+  "summary": "Cumples todos los requisitos obligatorios. Tu principal margen de mejora está en Docker.",
+  "matches": [
+    { "requirementId": "a1…", "description": "Al menos 1 año de experiencia con Java y Spring Boot", "type": "OBLIGATORIO", "result": "CUMPLE", "evidence": "Prácticas de 12 meses como desarrollador Java (Spring Boot) en …" },
+    { "requirementId": "a4…", "description": "Experiencia con React", "type": "DESEABLE", "result": "PARCIAL", "evidence": "Proyecto personal con React; sin experiencia profesional" },
+    { "requirementId": "a5…", "description": "Docker", "type": "DESEABLE", "result": "NO_CUMPLE", "evidence": null }
+  ],
+  "suggestions": [
+    "Pon tu experiencia con Spring Boot en la primera línea del resumen.",
+    "Menciona tu proyecto con React con un enlace al repositorio.",
+    "Añade un Dockerfile a uno de tus proyectos públicos y menciónalo."
+  ],
+  "createdAt": "2026-11-04T16:31:02Z"
+}
+```
+
+#### Ejemplo 3 — `PATCH /api/v1/applications/{applicationId}/status`
+
+```json
+// Petición
+{ "status": "ENVIADA", "boardPosition": 0, "version": 3 }
+
+// Respuesta 409 Conflict (transición no permitida)
+{
+  "type": "https://jobpilot.dev/problems/invalid-status-transition",
+  "title": "Transición de estado no permitida",
+  "status": 409,
+  "detail": "No se puede pasar de OFERTA a ENVIADA.",
+  "instance": "/api/v1/applications/5f0c…/status"
+}
+```
 
 ---
 
 ## 5. Historias de Usuario
 
-> Documenta 3 de las historias de usuario principales utilizadas durante el desarrollo, teniendo en cuenta las buenas prácticas de producto al respecto.
+> El MVP se compone de **5 historias de usuario must-have**, una por funcionalidad. Se documentan las cinco porque cada una es la unidad de alcance del proyecto. Formato: *Como / Quiero / Para*, criterios de aceptación en Gherkin, prioridad (MoSCoW) y estimación en puntos de historia.
 
-**Historia de Usuario 1**
+### Historia de Usuario 1 — HU-01: Crear mi perfil a partir del CV
 
-**Historia de Usuario 2**
+**Como** candidato en búsqueda de empleo,
+**quiero** subir mi CV en PDF y que la aplicación cree mi perfil profesional automáticamente,
+**para** no tener que escribir a mano mis datos y poder compararme con cualquier oferta.
 
-**Historia de Usuario 3**
+- **Prioridad:** Must · **Estimación:** 5 SP · **Funcionalidad:** F1
+
+**Criterios de aceptación**
+
+```gherkin
+Escenario: Extracción correcta del CV
+  Dado que estoy autenticado y no tengo perfil
+  Cuando subo un CV en PDF con texto de menos de 5 MB
+  Entonces veo un formulario prerrellenado con titular, resumen, años de experiencia,
+       habilidades, experiencias, formación e idiomas
+  Y puedo editar, añadir o eliminar cualquier campo antes de guardar
+
+Escenario: Fichero no válido
+  Cuando subo un fichero que no es PDF o que pesa más de 5 MB
+  Entonces veo el error "Solo se admiten PDF de hasta 5 MB" y no se envía nada a la IA
+
+Escenario: PDF sin texto (escaneado)
+  Cuando subo un PDF del que no se puede extraer texto
+  Entonces veo un aviso que me sugiere subir un PDF con texto o rellenar el perfil a mano
+
+Escenario: Servicio de IA no disponible
+  Cuando la IA no responde
+  Entonces veo un mensaje para reintentar y conservo la opción de rellenar el perfil a mano
+```
+
+**Notas:** el PDF no se guarda; solo se guarda el texto extraído. Si se vuelve a subir un CV, se pide confirmación antes de sobrescribir el perfil.
+
+### Historia de Usuario 2 — HU-02: Importar una oferta de trabajo
+
+**Como** candidato,
+**quiero** pegar el texto de una oferta y que la aplicación identifique sus datos clave y requisitos,
+**para** tener cada oferta estructurada sin leerla y copiarla línea a línea.
+
+- **Prioridad:** Must · **Estimación:** 3 SP · **Funcionalidad:** F2
+
+**Criterios de aceptación**
+
+```gherkin
+Escenario: Importación correcta
+  Dado que estoy autenticado
+  Cuando pego el texto de una oferta (entre 200 y 20.000 caracteres) y pulso "Analizar oferta"
+  Entonces veo el puesto, la empresa, la ubicación, la modalidad y el salario (si aparece)
+  Y veo los requisitos agrupados en "Obligatorios" y "Deseables"
+  Y la oferta aparece en mi dashboard
+
+Escenario: Texto demasiado corto
+  Cuando pego menos de 200 caracteres
+  Entonces el botón queda deshabilitado y veo cuántos caracteres faltan
+
+Escenario: Fallo de extracción
+  Cuando la IA falla tras un reintento
+  Entonces la oferta se guarda con estado FALLIDA y veo un botón "Reintentar extracción"
+```
+
+### Historia de Usuario 3 — HU-03: Ver mi encaje con una oferta
+
+**Como** candidato,
+**quiero** ver una puntuación de encaje con el detalle de qué requisitos cumplo y cuáles no,
+**para** decidir rápido si vale la pena postular y qué destacar en mi candidatura.
+
+- **Prioridad:** Must · **Estimación:** 8 SP · **Funcionalidad:** F3
+
+**Criterios de aceptación**
+
+```gherkin
+Escenario: Análisis con perfil completo
+  Dado que tengo perfil y una oferta con requisitos extraídos
+  Cuando abro la oferta y pulso "Calcular encaje"
+  Entonces veo una puntuación de 0 a 100 con su color (rojo < 50, ámbar 50-74, verde ≥ 75)
+  Y cada requisito aparece marcado como Cumple / Parcial / No cumple, con la evidencia de mi perfil
+  Y veo entre 3 y 5 sugerencias concretas
+
+Escenario: Requisito bloqueante
+  Cuando no cumplo algún requisito obligatorio
+  Entonces veo el aviso "Hay requisitos obligatorios que no cumples" con esos requisitos señalados
+
+Escenario: Puntuación reproducible
+  Dado el mismo resultado por requisito
+  Entonces la puntuación es siempre la misma, según la fórmula documentada
+
+Escenario: Sin perfil
+  Dado que no he creado mi perfil
+  Cuando intento calcular el encaje
+  Entonces se me redirige a crear el perfil
+```
+
+### Historia de Usuario 4 — HU-04: Generar carta y CV adaptados
+
+**Como** candidato,
+**quiero** generar una carta de presentación y un CV adaptados a una oferta concreta,
+**para** enviar candidaturas personalizadas en minutos en lugar de horas.
+
+- **Prioridad:** Must · **Estimación:** 5 SP · **Funcionalidad:** F4
+
+**Criterios de aceptación**
+
+```gherkin
+Escenario: Generación de la carta
+  Dado que la oferta tiene un análisis de encaje
+  Cuando pulso "Generar carta"
+  Entonces veo en un editor una carta de 250-400 palabras, en el idioma de la oferta,
+       que menciona el puesto y al menos dos requisitos que cumplo
+  Y no incluye experiencias ni habilidades que no estén en mi perfil
+
+Escenario: Edición y versionado
+  Cuando edito el texto y guardo
+  Entonces se crea una nueva versión marcada como "editada por mí"
+
+Escenario: Exportación
+  Cuando pulso "Exportar PDF"
+  Entonces se descarga un PDF con el contenido actual y mi nombre en la cabecera
+```
+
+### Historia de Usuario 5 — HU-05: Gestionar mis candidaturas en un tablero
+
+**Como** candidato que postula a muchas ofertas,
+**quiero** ver todas mis candidaturas en un tablero kanban y moverlas según avanzan,
+**para** no perder ninguna oportunidad y saber cuándo hacer seguimiento.
+
+- **Prioridad:** Must · **Estimación:** 5 SP · **Funcionalidad:** F5
+
+**Criterios de aceptación**
+
+```gherkin
+Escenario: Ver el tablero
+  Dado que tengo candidaturas guardadas
+  Cuando abro "Tablero"
+  Entonces veo las columnas Guardada, Enviada, Entrevista, Oferta y Descartada
+  Y cada tarjeta muestra puesto, empresa, puntuación y fecha de seguimiento
+
+Escenario: Mover una tarjeta
+  Cuando arrastro una tarjeta de "Guardada" a "Enviada"
+  Entonces se guarda el nuevo estado, la fecha de envío pasa a ser hoy si estaba vacía
+  Y el cambio se mantiene al recargar la página
+
+Escenario: Transición no permitida
+  Cuando intento mover una tarjeta de "Oferta" a "Guardada"
+  Entonces la tarjeta vuelve a su columna y veo un mensaje explicativo
+
+Escenario: Seguimiento vencido
+  Dado que una candidatura tiene fecha de seguimiento anterior a hoy y no está en Oferta ni Descartada
+  Entonces su tarjeta muestra el indicador "Seguimiento pendiente"
+```
+
+**Reglas de transición:** solo se avanza al estado siguiente (`GUARDADA → ENVIADA → ENTREVISTA → OFERTA`); desde cualquier estado distinto de `DESCARTADA` se puede pasar a `DESCARTADA` (incluida `OFERTA`, si el candidato rechaza la oferta); `DESCARTADA → GUARDADA` permite reabrir. No se puede retroceder ni saltar estados. Dentro de la misma columna se puede reordenar libremente.
 
 ---
 
 ## 6. Tickets de Trabajo
 
-> Documenta 3 de los tickets de trabajo principales del desarrollo, uno de backend, uno de frontend, y uno de bases de datos. Da todo el detalle requerido para desarrollar la tarea de inicio a fin teniendo en cuenta las buenas prácticas al respecto. 
+**Backlog del MVP (vista general)**
 
-**Ticket 1**
+| ID | Tipo | Título | HU | SP |
+|---|---|---|---|---|
+| JP-DB-01 | Base de datos | Esquema inicial con Flyway y datos de prueba | Todas | 3 |
+| JP-BE-01 | Backend | Scaffolding Spring Boot, configuración, manejo global de errores | — | 2 |
+| JP-BE-02 | Backend | Registro, login y filtro JWT | — | 3 |
+| JP-BE-03 | Backend | Puerto `LlmGateway`, adaptador Spring AI y `FakeLlmGateway` | 1–4 | 3 |
+| JP-BE-04 | Backend | Subida de CV y extracción de perfil | HU-01 | 5 |
+| JP-BE-05 | Backend | Importación de ofertas y extracción de requisitos | HU-02 | 3 |
+| **JP-BE-06** | **Backend** | **Análisis de encaje: `MatchScoreCalculator` y endpoint** | HU-03 | 5 |
+| JP-BE-07 | Backend | Generación, versionado y exportación PDF de documentos | HU-04 | 5 |
+| JP-BE-08 | Backend | API de candidaturas y política de transiciones | HU-05 | 3 |
+| JP-FE-01 | Frontend | Scaffolding Vite + React, router, cliente API, auth | — | 3 |
+| JP-FE-02 | Frontend | Onboarding: subida de CV y formulario de perfil | HU-01 | 5 |
+| JP-FE-03 | Frontend | Dashboard y formulario de nueva oferta | HU-02 | 3 |
+| JP-FE-04 | Frontend | Detalle de oferta y panel de análisis | HU-03 | 5 |
+| JP-FE-05 | Frontend | Editor de documentos y exportación | HU-04 | 3 |
+| **JP-FE-06** | **Frontend** | **Tablero kanban de candidaturas** | HU-05 | 5 |
+| JP-QA-01 | Tests | Suite E2E del flujo principal con Playwright | Todas | 3 |
+| JP-OPS-01 | DevOps | Docker Compose y pipeline de CI en GitHub Actions | — | 3 |
 
-**Ticket 2**
+A continuación se detallan los tres tickets representativos que pide la plantilla: uno de base de datos, uno de backend y uno de frontend.
 
-**Ticket 3**
+### Ticket 1 — JP-DB-01: Esquema inicial de base de datos con Flyway y datos de prueba
+
+**Tipo:** Base de datos · **Prioridad:** Alta (bloquea al resto de tickets de backend) · **Estimación:** 3 SP · **Historias:** todas
+
+**Descripción**
+Crear la migración inicial de Flyway con todas las tablas del modelo de datos (sección 3) y un script de datos de prueba que solo se cargue en el perfil `dev`, para que el proyecto se pueda revisar en local con datos realistas.
+
+**Alcance**
+
+1. Añadir `flyway-core` y `flyway-database-postgresql` al `pom.xml` y configurar `spring.flyway.locations` (`classpath:db/migration` siempre; además `classpath:db/seed` en el perfil `dev`).
+2. Crear `V1__init_schema.sql` con las 11 tablas: `users`, `profiles`, `profile_skills`, `experiences`, `job_offers`, `offer_requirements`, `match_analyses`, `requirement_matches`, `generated_documents`, `applications`, `application_status_history`.
+3. Definir para cada tabla:
+   - PK `UUID`; FKs con `ON DELETE CASCADE` según la sección 3.2.
+   - Enumerados como `VARCHAR` + `CHECK` (por ejemplo, `CHECK (status IN ('GUARDADA','ENVIADA','ENTREVISTA','OFERTA','DESCARTADA'))`).
+   - Restricciones: `UNIQUE (lower(email))` en `users` (índice único funcional); `UNIQUE (user_id)` en `profiles`; `UNIQUE (profile_id, lower(name))` en `profile_skills`; `UNIQUE (offer_id)` en `applications`; `UNIQUE (analysis_id, requirement_id)`; `UNIQUE (offer_id, type, version)`; `CHECK (score BETWEEN 0 AND 100)`; `CHECK (salary_max >= salary_min)`; `CHECK (char_length(raw_text) BETWEEN 200 AND 20000)`; `CHECK (end_date IS NULL OR end_date >= start_date)`.
+   - Índices: `job_offers (user_id, created_at DESC)`, `applications (user_id, status, board_position)`, `match_analyses (offer_id, created_at DESC)` y un índice en cada FK.
+4. Crear `db/seed/R__demo_data.sql` (migración repetible) con: el usuario `demo@jobpilot.dev` (hash BCrypt de `Demo1234!`), un perfil completo con 8 habilidades y 2 experiencias, 3 ofertas con requisitos y análisis (puntuaciones 42, 68 y 85) y 3 candidaturas en GUARDADA, ENVIADA (con seguimiento vencido) y ENTREVISTA. Debe poder ejecutarse varias veces sin duplicar datos (`ON CONFLICT DO NOTHING`).
+5. Mapear las entidades JPA con `spring.jpa.hibernate.ddl-auto=validate`, de modo que Hibernate falle al arrancar si el código y el esquema no coinciden.
+
+**Criterios de aceptación**
+
+- [ ] `./mvnw spring-boot:run` contra una BD vacía crea el esquema sin errores y Hibernate lo valida.
+- [ ] Con el perfil `dev`, se puede iniciar sesión con las credenciales de prueba y el tablero muestra 3 candidaturas.
+- [ ] Insertar un email duplicado (sin distinguir mayúsculas), una puntuación de 101 o un estado no válido falla por restricción.
+- [ ] Borrar un usuario elimina en cascada su perfil, ofertas, análisis, documentos y candidaturas.
+- [ ] El perfil `prod` no carga los datos de prueba.
+
+**Tests**
+
+- `SchemaMigrationIT` (Testcontainers con `postgres:16`): aplica las migraciones y comprueba que existen todas las tablas e índices consultando `information_schema`.
+- `ConstraintsIT`: un caso por restricción crítica (se espera `DataIntegrityViolationException`).
+- `CascadeDeleteIT`: borra un usuario y comprueba que quedan 0 filas relacionadas.
+
+**Definición de hecho:** migraciones revisadas, tests en verde en la CI, diagrama de la sección 3 actualizado si ha cambiado algo, PR aprobado.
+
+### Ticket 2 — JP-BE-06: Análisis de encaje (`MatchScoreCalculator` y `POST /offers/{offerId}/analysis`)
+
+**Tipo:** Backend · **Prioridad:** Alta (núcleo del producto) · **Estimación:** 5 SP · **Historia:** HU-03
+**Dependencias:** JP-DB-01, JP-BE-03 (`LlmGateway`), JP-BE-04 (perfil), JP-BE-05 (ofertas)
+
+**Descripción**
+Implementar el análisis de encaje entre el perfil del usuario y una oferta. El LLM clasifica cada requisito (CUMPLE / PARCIAL / NO_CUMPLE) con su evidencia y propone sugerencias; la puntuación se calcula en Java de forma determinista.
+
+**Alcance técnico**
+
+1. **Dominio** (`analysis/domain`)
+   - `enum MatchResult { CUMPLE(1.0), PARCIAL(0.5), NO_CUMPLE(0.0) }`.
+   - `MatchScoreCalculator` (clase sin dependencias de Spring):
+     `ScoreResult calculate(List<RequirementEvaluation> evaluations)` → `score` (0–100) y `hasBlockingGap`.
+     Fórmula: 70 % la media de los obligatorios + 30 % la media de los deseables; si no hay deseables, el 100 % son los obligatorios. Redondeo `HALF_UP`. Si la lista está vacía → `IllegalArgumentException`.
+2. **Integración con la IA** (`ai`)
+   - Plantilla `prompts/match.st`: el prompt de sistema define el rol, marca el perfil y la oferta como *datos no confiables* entre delimitadores y exige una salida JSON con `{ matches: [{ requirementId, result, evidence }], summary, suggestions[3..5] }`.
+   - Método `LlmGateway.evaluateMatch(ProfileSnapshot, List<RequirementSnapshot>) → MatchEvaluation`.
+   - Validación de la respuesta: todos los `requirementId` existen y no se repiten, ninguno falta, `result` es válido y hay entre 3 y 5 sugerencias. Si no es válida → un reintento → `LlmResponseInvalidException` (→ 502).
+3. **Servicio** `MatchAnalysisService.analyze(userId, offerId)`
+   - Carga la oferta con `findByIdAndUserId` (si no existe → `NotFoundException` → 404).
+   - Comprueba que existe el perfil y que la oferta está `COMPLETADA` con al menos un requisito (si no → `ConflictException` → 409).
+   - Llama al LLM fuera de la transacción de BD; después persiste `match_analyses` + `requirement_matches` en una transacción.
+   - Guarda `llm_model` para la trazabilidad.
+4. **Controlador** `AnalysisController`
+   - `POST /api/v1/offers/{offerId}/analysis` → 201 + `AnalysisResponse`.
+   - `GET /api/v1/offers/{offerId}/analysis` → último análisis o 404.
+   - Límite de peticiones (Bucket4j) compartido con el resto de endpoints de IA → 429.
+5. **Fake** — `FakeLlmGateway` devuelve una evaluación fija leída de `fixtures/match-evaluation.json` para los tests de integración y E2E.
+
+**Criterios de aceptación**
+
+- [ ] Con 3 obligatorios CUMPLE y deseables PARCIAL, NO_CUMPLE y CUMPLE, la respuesta tiene `score = 85` y `hasBlockingGap = false`.
+- [ ] Con un obligatorio NO_CUMPLE, `hasBlockingGap = true`.
+- [ ] Un usuario no puede analizar ofertas de otro (404).
+- [ ] Sin perfil → 409 con `type` `.../profile-required`.
+- [ ] Una respuesta del LLM no válida dos veces seguidas → 502 y no se guarda nada.
+- [ ] El endpoint aparece documentado en Swagger UI.
+
+**Tests**
+
+- `MatchScoreCalculatorTest` (`@ParameterizedTest`, al menos 8 casos: todo cumple, nada cumple, sin deseables, solo un requisito, casos límite de redondeo 84,5 → 85, lista vacía).
+- `MatchEvaluationValidatorTest`: un id que falta, un id duplicado, un id desconocido, pocas o demasiadas sugerencias.
+- `MatchAnalysisServiceTest` (Mockito): orquestación, reintento ante una respuesta no válida, no se llama al LLM si no hay perfil.
+- `AnalysisControllerIT` (Testcontainers + MockMvc + `FakeLlmGateway`): 201 / 401 / 404 / 409.
+
+**Definición de hecho:** cobertura ≥ 90 % en `analysis.domain`, tests en verde en la CI, contrato OpenAPI actualizado, PR revisado.
+
+### Ticket 3 — JP-FE-06: Tablero kanban de candidaturas
+
+**Tipo:** Frontend · **Prioridad:** Alta · **Estimación:** 5 SP · **Historia:** HU-05
+**Dependencias:** JP-FE-01 (cliente API y auth), JP-BE-08 (API de candidaturas)
+
+**Descripción**
+Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la posibilidad de moverlas arrastrando (y con el teclado), con actualización optimista y vuelta atrás si el backend rechaza el cambio.
+
+**Alcance técnico**
+
+1. **Ruta y datos**
+   - Ruta protegida `/tablero` en React Router.
+   - Hook `useApplications()` con TanStack Query (`GET /applications`), agrupando por `status` y ordenando por `boardPosition`.
+   - Hook `useChangeStatus()` (`PATCH /applications/{id}/status`) con actualización optimista: `onMutate` mueve la tarjeta en la caché, `onError` restaura el estado anterior y muestra un *toast*, y `onSettled` invalida la consulta.
+2. **Componentes** (`features/tracker/`)
+   - `KanbanBoard`: `DndContext` de dnd-kit con `PointerSensor` y `KeyboardSensor` (accesibilidad).
+   - `KanbanColumn`: título, contador de tarjetas y lista ordenable (`SortableContext`).
+   - `ApplicationCard`: puesto, empresa, `MatchScoreBadge`, fecha de seguimiento e indicador "Seguimiento pendiente" si `followUpOverdue`.
+   - `ApplicationDrawer`: panel lateral al hacer clic en una tarjeta, con notas, fecha de envío y fecha de seguimiento (React Hook Form + Zod) → `PATCH /applications/{id}`.
+3. **Reglas en cliente:** un helper `canTransition(from, to)` replica la política del backend para resaltar las columnas no válidas mientras se arrastra. El backend sigue siendo quien decide; si responde 409, se deshace el movimiento.
+4. **Estados de la UI:** *skeleton* mientras carga, estado vacío ("Aún no tienes candidaturas — importa una oferta") con enlace al formulario, y error con botón de reintentar.
+5. **Responsive:** en pantallas de menos de 768 px las columnas pasan a pestañas y el cambio de estado se hace con un menú "Mover a…".
+
+**Criterios de aceptación**
+
+- [ ] Se ven 5 columnas con su contador y las tarjetas ordenadas por `boardPosition`.
+- [ ] Al arrastrar de Guardada a Enviada, la tarjeta cambia de columna al instante y el cambio se mantiene al recargar.
+- [ ] Si el backend responde 409, la tarjeta vuelve a su sitio y aparece un *toast* con el `detail` del error.
+- [ ] Se puede mover una tarjeta solo con el teclado (Espacio para cogerla, flechas para moverla, Espacio para soltarla).
+- [ ] Las tarjetas con seguimiento vencido muestran el indicador.
+- [ ] No aparecen errores ni avisos en la consola; Lighthouse Accessibility ≥ 90 en la página.
+
+**Tests**
+
+- `KanbanBoard.test.tsx` (Vitest + React Testing Library + MSW): pinta columnas y tarjetas desde la respuesta simulada; el estado vacío; la vuelta atrás ante un 409.
+- `canTransition.test.ts`: tabla completa de transiciones permitidas y prohibidas.
+- Cubierto también por el E2E del flujo principal (JP-QA-01): arrastrar a "Enviada" y comprobar que se mantiene.
+
+**Definición de hecho:** componentes tipados sin `any`, tests en verde, lint sin errores, revisado en móvil y escritorio, PR aprobado.
 
 ---
 
 ## 7. Pull Requests
 
-> Documenta 3 de las Pull Requests realizadas durante la ejecución del proyecto
+> Todavía no hay Pull Requests: la Entrega 1 es solo de documentación. Las PRs se documentarán aquí a partir de la Entrega 2.
 
-**Pull Request 1**
+**Convención prevista**
 
-**Pull Request 2**
+- Una rama por ticket: `feat/JP-BE-06-match-analysis`, `feat/JP-FE-06-kanban`, `chore/JP-OPS-01-ci`…
+- Título con [Conventional Commits](https://www.conventionalcommits.org/): `feat(analysis): calcular puntuación de encaje determinista`.
+- Plantilla de descripción: contexto y ticket enlazado, cambios principales, cómo probarlo, capturas (si es frontend), checklist (tests, documentación, migraciones).
+- La CI tiene que estar en verde antes de fusionar. Antes de cada PR se hace una revisión asistida por IA (ver `prompts.md`, sección 7).
 
-**Pull Request 3**
+**Pull Request 1** — *Pendiente (Entrega 2): scaffolding de backend y frontend, esquema de BD y CI (JP-BE-01, JP-FE-01, JP-DB-01, JP-OPS-01).*
 
+**Pull Request 2** — *Pendiente (Entrega 2): primer flujo de extremo a extremo, importar oferta → análisis de encaje (JP-BE-03, JP-BE-05, JP-BE-06, JP-FE-03, JP-FE-04).*
+
+**Pull Request 3** — *Pendiente (Entrega 3): tablero kanban y suite E2E (JP-BE-08, JP-FE-06, JP-QA-01).*
