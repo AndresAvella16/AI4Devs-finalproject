@@ -86,18 +86,6 @@ URL de mi repo: https://github.com/AndresAvella16/AI4Devs-finalproject
 
 *Resultado:* primera versión completa del `readme.md` (secciones 0–7) y de este `prompts.md`. Durante la generación, la IA tomó una decisión de diseño relevante: **el LLM clasifica cada requisito y Java calcula la puntuación**, para que el número sea determinista y se pueda testear.
 
-**Prompt 4:** Revisión de la documentación contra los requisitos de la Entrega 1
-
-```
-Pero estos dos archivos estan listos para la entrega 1? con todos los requisitos
-teniendo en cuenta que hay 2 entregas mas?
-```
-
-*Resultado:* la IA comparó los dos archivos con la lista de requisitos de la Entrega 1 y con los criterios de feedback (problema, MVP viable, coherencia técnica, IA en ≥ 4 fases), validó el YAML OpenAPI (sintaxis y `$ref`) y consultó las versiones vigentes del stack. Cambios aplicados:
-- **Spring Boot 3 → Spring Boot 4** y Spring AI 2.0: Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026 y Spring AI 2.0 requiere Boot 4. React 18 → React 19.
-- Añadida una tabla **"Stack tecnológico"** explícita en la sección 2.2, porque es un requisito de la Entrega 1 y la información estaba repartida por el documento.
-- Aclarada la regla de transiciones del tablero (`OFERTA → DESCARTADA` permitida, sin retrocesos ni saltos), que estaba ambigua entre la HU-05 y la sección de tests.
-
 ---
 
 ## 2. Arquitectura del Sistema
