@@ -23,18 +23,21 @@
 |---|---|---|---|
 | **Análisis** | Claude (claude.ai, Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Generar la idea a partir de un problema real (búsqueda de empleo), acotar el MVP a 5 funcionalidades y redactar las historias de usuario. |
 | **Diseño** | Claude (claude.ai) | Claude Opus 5.5 | Arquitectura, modelo de datos, contrato OpenAPI, tickets y la documentación de la Entrega 1. |
-| **Implementación** | Claude Code (previsto) | Claude Sonnet 5.5 para el código del día a día; Claude Opus 5.5 para los tickets complejos (`LlmGateway`, análisis de encaje) | Implementación ticket a ticket guiada por el `readme.md` y el `CLAUDE.md`. |
-| **Pruebas** | Claude Code (previsto) | Claude Sonnet 5.5 | Generar casos de test parametrizados, *fixtures* de respuestas del LLM y el E2E con Playwright. |
-| **Despliegue** | Claude Code (previsto) | Claude Sonnet 5.5 | Dockerfile multi-stage, `docker-compose.yml` y workflow de GitHub Actions. |
-| **Mantenimiento** | Claude Code (previsto) | Claude Sonnet 5.5 | Revisión de PRs, refactorización y actualización de la documentación. |
+| **Implementación** | Claude Code (terminal, Windows) | Claude Opus 5.5 (modelo por defecto de Claude Code) | Implementación ticket a ticket con el comando `/ticket`, guiada por el `readme.md` y el `CLAUDE.md`. |
+| **Revisión de cada plan** | Claude (claude.ai, Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Revisar el plan de cada `/ticket` antes de dar el OK, preparar las respuestas a sus dudas y las descripciones de las PRs. Un segundo modelo que no ha escrito el código actúa como revisor. |
+| **Pruebas** | Claude Code | Claude Opus 5.5 | Tests primero en cada ticket (fase 2 de `/ticket`): unitarios, de integración con Testcontainers y prueba real con el perfil `dev`. El E2E con Playwright está previsto para la Entrega 3. |
+| **Despliegue** | Claude Code (previsto) | Claude Opus 5.5 | Dockerfile multi-stage, `docker-compose.yml` y workflow de GitHub Actions. |
+| **Mantenimiento** | Claude Code (previsto) | Claude Opus 5.5 | Revisión de PRs, refactorización y actualización de la documentación. |
 
-Además, **la IA forma parte del producto**: el backend usa Claude a través de Spring AI para estructurar CVs, extraer requisitos, evaluar el encaje y redactar cartas.
+Además, **la IA forma parte del producto**: el backend usa Claude a través de Spring AI para estructurar CVs, extraer requisitos, evaluar el encaje y redactar cartas. Dentro del producto se usa **Claude Sonnet 5.5** (`claude-sonnet-5-5`, configurable con `ANTHROPIC_MODEL`), elegido por coste y velocidad. Para desarrollar se usa Opus 5.5.
 
 ### Contexto avanzado
 
 - **Proyecto de claude.ai** con la descripción y las reglas del máster como contexto permanente, para que todas las respuestas respeten los requisitos de evaluación (3–5 funcionalidades, tests, IA en las fases del ciclo de vida).
 - **Plantillas oficiales** del `readme.md` y el `prompts.md` pasadas como entrada para que la documentación siga exactamente su estructura.
-- **`CLAUDE.md` (previsto para la Entrega 2)** en la raíz del repo con: stack y versiones, estructura *package-by-feature*, convenciones (DTOs como `record`, errores con `ProblemDetail`, consultas siempre filtradas por `userId`), comandos de build y test, y la regla "todo ticket se cierra con sus tests en verde".
+- **`CLAUDE.md`** en la raíz del repo (ver sección 2.3 → Prompt 2): el readme como fuente de verdad, stack con versiones, capas *package-by-feature*, reglas obligatorias (DTOs como `record`, `ProblemDetail`, consultas filtradas por `userId`, `LlmGateway` como único acceso al LLM, la puntuación la calcula Java), comandos para Windows, el flujo SDD y la regla de **no hacer commit sin que se lo pida**. Claude Code lo lee en cada sesión, y se ha ido actualizando con los cambios de los tickets (p. ej. Flyway en Boot 4 y JWT con Spring Security).
+- **Comando personalizado `/ticket <ID>`** (`.claude/commands/ticket.md`): aplica el flujo SDD de la Lección 2 a cada ticket en 5 fases: especificación con alcance, criterios, plan de archivos y dudas → **espera mi OK** → tests primero → implementación → verificación completa → resumen con una propuesta para este archivo (ver sección 6 → Prompt 3).
+- **Una conversación por ticket**: `/clear` antes de cada `/ticket`, para que el contexto no se llene y no haya que compactar a mitad de ticket.
 - **Subagente de revisión (previsto)**: un agente que no ha visto el desarrollo revisa cada PR contra los criterios de aceptación del ticket, para que el código no se valide a sí mismo.
 
 ### Criterio humano (ajustes manuales sobre la salida de la IA)
@@ -48,6 +51,12 @@ Además, **la IA forma parte del producto**: el backend usa Claude a través de 
 | Revisión de arquitectura (2.1) | Ejecuté la revisión en un chat nuevo, para que no la hiciera la misma conversación que había escrito el documento. Acepté, entre otros, los cambios sobre la gestión de errores del LLM (504 / 503 / 502). |
 | Revisión de coherencia (secciones 3, 4 y 6) | La revisión destapó que tres cambios que yo había aceptado en la ronda de la 2.1 contradecían otras secciones. **Lección:** después de aceptar un cambio hay que cruzarlo con el resto del documento. De las 24 incoherencias encontradas, **decidí corregir la 1 a la 11**, que son las que afectan al flujo principal, y dejar la 12 a la 24 (tipos, textos y ajustes menores) para antes de la Entrega 2. |
 | Revisión del modelo de datos (sección 3) | Apliqué el diff completo de la IA (FKs compuestas, índices documentados, `CHECK` nuevos, `VARCHAR(3)` para la moneda) y alineé el ticket de base de datos. Mantuve JSONB en idiomas, formación y sugerencias porque nunca se filtran por ellos en SQL. |
+| Revisión de cada plan de `/ticket` (Entrega 2) | No di nunca el OK a un plan sin revisarlo, y respondí a **todas** sus dudas numeradas, no solo a algunas. El detalle por ticket está en la sección 6 → Prompt 3. |
+| Prueba real además de los tests | Exigí en cada ticket arrancar la app con el perfil `dev` contra la BD de Docker antes del commit. En JP-BE-01 detectó un `.env` vacío y comentarios en la misma línea que el valor, que los tests con Testcontainers no ven. |
+| Versiones por compatibilidad | Fijé Spring Boot 4.1.x (no una versión menor posterior) porque Spring AI 2.0 solo soporta Boot 4.0/4.1. |
+| Seguridad: menos código propio | La IA detectó que JJWT arrastra Jackson 2 y Boot 4 usa Jackson 3, y propuso un adaptador propio. Elegí el soporte de JWT de Spring Security (OAuth2 Resource Server, Nimbus) para no escribir ni el adaptador ni el filtro JWT. |
+| Coste del LLM | Elegí `claude-sonnet-5-5` como modelo por defecto del producto en vez de Opus: es suficiente para extraer y evaluar requisitos, y más rápido y barato. |
+| Datos personales | Pedí que no se registren en los logs ni los cuerpos de las peticiones ni los prompts y respuestas del modelo, porque contienen datos del CV. |
 
 ---
 
@@ -140,7 +149,7 @@ los diagramas de flujo principal de usuario, Diagrama de arquitectura, etc
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 2) Comprobación de compatibilidad de librerías
+**Prompt 2:** Comprobación de compatibilidad de librerías. *No se lanzó como prompt aparte: la hizo Claude Code dentro de la fase 1 de cada ticket, consultando Maven Central. Resultado: Spring Boot 4.1.2, springdoc-openapi 3.2.0, Spring AI 2.0.2 (compilado contra Boot 4.1.2 y Jackson 3), y se descartó Spring AI 2.1.0-RC2 por ser una versión candidata.*
 
 ```
 Para este listado de componentes (Spring Boot 4, Java 21, Spring AI 2.0 con Anthropic,
@@ -164,18 +173,24 @@ recorte en una línea.
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 2) Generación del `CLAUDE.md` a partir de la estructura
+**Prompt 2:** Generación del `CLAUDE.md` y del comando `/ticket` (Claude Opus 5.5, claude.ai, con la Lección 2 como contexto)
 
 ```
-A partir de las secciones 2.2 y 2.3 de mi readme.md, genera un CLAUDE.md para la raíz
-del repositorio que sirva de contexto a Claude Code durante la implementación. Incluye:
-stack y versiones, estructura de carpetas y responsabilidad de cada módulo,
-convenciones obligatorias (DTOs como record, ProblemDetail, consultas filtradas por
-userId, LlmGateway como único punto de acceso al LLM), comandos de build/test/run y
-la definición de hecho de un ticket. Máximo 120 líneas.
+Tengo Windows 10 con Java 21 (Temurin), Node.js LTS, Docker Desktop con WSL 2, Git y
+VS Code con Extension Pack for Java y Spring Boot Extension Pack. Voy a programar con
+Claude Code, como dice `prompts.md`. Todavía no tengo API key de Anthropic:
+desarrollamos con `LLM_MODE=fake` y la saco antes de la demo. El repo está en
+`C:\dev\AI4Devs-finalproject`.
 ```
 
-**Prompt 3:** ⏳ (Entrega 2) Scaffolding inicial
+*Resultado:* a partir de las secciones 2.2, 2.3 y 2.5 del readme y de la Lección 2 (SDD por ticket; "define tu arquitectura desde el minuto uno"; *rules* estrictas para React), la IA generó `CLAUDE.md`, el comando `.claude/commands/ticket.md`, `.gitignore`, `.gitattributes` (LF en el repo y CRLF solo en los scripts de Windows) y `.env.example`, y los dejó directamente en el repo.
+
+*Ajuste humano:*
+- Antes de usarlos, comprobé contra la Lección 1 que trabajar en `main` con una rama por ticket y crear `feature/entrega-2-aan` al final cumple la regla de "partir del estado más reciente".
+- Mantuve la regla de que Claude Code no haga commit, push ni merge sin pedírselo.
+- Cuando la IA puso los comentarios de `.env.example` en la misma línea que el valor, se corrigió en JP-BE-01, porque al leer el `.env` en formato `.properties` se tragaban como parte del valor.
+
+**Prompt 3:** Scaffolding inicial. *El del backend se hizo con `/ticket JP-BE-01` (ver sección 6 → Prompt 3); el del frontend, con `/ticket JP-FE-01`. Este prompt queda como referencia del alcance.*
 
 ```
 Usando el CLAUDE.md del repositorio, crea el scaffolding de backend/ (Spring Boot 4,
@@ -289,7 +304,7 @@ Además propuso `currency VARCHAR(3)` en lugar de `CHAR(3)`, porque Hibernate fa
 - Mantuve la referencia al endpoint de reintento (`POST /offers/{offerId}/extraction`) que había añadido con la fila 5.
 - Actualicé el ticket JP-DB-01 (restricciones, criterios de aceptación y datos de prueba con `applied_at`) para que no quedara desalineado. Esto era la fila 19 de la revisión de coherencia.
 
-**Prompt 3:** ⏳ (Entrega 2) Generación de la migración Flyway
+**Prompt 3:** Generación de la migración Flyway. *Se hizo con `/ticket JP-DB-01` (ver sección 6 → Prompt 3): `V1__init_schema.sql` con las 11 tablas, las restricciones con nombre explícito y los 16 índices de la sección 3.2, y `R__demo_data.sql` con los datos de prueba.*
 
 ```
 A partir de la sección 3.2 de mi readme.md, genera V1__init_schema.sql para
@@ -380,24 +395,31 @@ y al final de la Entrega 3 estén las 5 funcionalidades y la suite de tests. Dam
 plan por semanas con las dependencias entre tickets y señala el camino crítico.
 ```
 
-**Prompt 3:** ⏳ (Entrega 2) Implementación guiada por ticket (plantilla para Claude Code)
+**Prompt 3:** Implementación guiada por ticket. **Workflow principal de la Entrega 2.**
 
-```
-Implementa el ticket [ID] del readme.md siguiendo el CLAUDE.md.
-1. Antes de escribir código, resume el alcance y los criterios de aceptación y
-   propón la lista de ficheros que vas a crear o modificar. Espera mi confirmación.
-2. Escribe primero los tests de los criterios de aceptación.
-3. Implementa hasta que ./mvnw verify (o npm test) pase.
-4. Termina con un resumen: qué has hecho, qué has decidido tú y qué queda pendiente.
-```
+Esta plantilla se convirtió en el comando de Claude Code `.claude/commands/ticket.md`. Se lanza con `/ticket <ID>` y tiene 5 fases:
+1. **Especificación:** alcance, criterios de aceptación (deducidos de la historia de usuario si el ticket no tiene detalle), dependencias, plan de archivos, tests y dudas o incoherencias del readme. **Espera mi OK.**
+2. **Tests primero.**
+3. **Implementación.**
+4. **Verificación completa** (`mvnw verify`).
+5. **Resumen** con las decisiones propias de la IA, los cambios en el readme y una propuesta para este archivo.
+
+Proceso en cada ticket: reviso el plan con un segundo modelo (Claude en claude.ai), respondo a **todas** las dudas, exijo la **prueba real** con el perfil `dev` antes del commit y cierro con una PR hacia `main`.
+
+| Ticket | PR | Lo que aportó la IA | Mi criterio humano |
+|---|---|---|---|
+| **JP-BE-01** Scaffolding backend y errores | #1 | Detectó que JP-BE-01 debía ir antes que JP-DB-01 y propuso no adelantar Spring Security. Corrigió ella sola acentos corrompidos por PowerShell 5.1. | Spring Boot 4.1.x por compatibilidad con Spring AI 2.0. Que el 500 se registre en el log con la traza. No registrar cuerpos de petición (CVs). Swagger desactivado en `prod`. Adelantar un compose mínimo con Postgres y leer el `.env` en `dev`. La prueba real destapó el `.env` vacío. |
+| **JP-DB-01** Esquema Flyway, seed y entidades | #2 | Detectó que en Boot 4 hace falta `spring-boot-starter-flyway`, porque con `flyway-core` solo no se ejecuta. Encontró dos errores del readme: la cardinalidad del diagrama 3.1 y la redacción de la convención de índices. Restricciones con nombre para que los tests comprueben cuál falla. | Respondí a las 8 dudas, no solo a las 3 que pedía como prioritarias. Pedí un aviso en el seed sobre `ON CONFLICT DO NOTHING`. Revisé y acepté el cambio en un test de JP-BE-01: arrancaba tres perfiles sobre la misma BD y Flyway lo rechazaba con razón. |
+| **JP-BE-02** Registro, login y JWT | #3 | Detectó el conflicto JJWT/Jackson 2 con Boot 4/Jackson 3. Previó el límite de 72 bytes de BCrypt y que el login tarde lo mismo exista o no el email. Hallazgo: ignorar el token en rutas públicas para que uno caducado no impida volver a entrar. | Cambié JJWT por Spring Security OAuth2 Resource Server (Nimbus): menos código de seguridad propio. Pedí validar el emisor (`iss`). Anoté el límite de intentos de login para JP-BE-05 y abrí la lista de deuda técnica del readme. |
+| **JP-BE-03** `LlmGateway` y modo fake | #4 | Propuso un puerto mínimo en el que cada ticket añade su método, para no inventar DTOs antes de tiempo. Descubrió que la autoconfiguración de Anthropic se activa siempre, y lo resolvió con un `EnvironmentPostProcessor`. Usó `ChatModel` + `BeanOutputConverter` para que el texto del usuario nunca se renderice como plantilla. Añadió un test de arquitectura que impide importar Spring AI fuera de `ai/`. | Sonnet 5.5 como modelo **del producto** (no confundir con el de Claude Code), en vez de Opus, por coste. Prueba real en `dev` sin API key. Anoté como deuda que `LLM_MODE` en el entorno tiene prioridad sobre el perfil `e2e`, con riesgo de gastar API en los tests. |
 
 ---
 
 ## 7. Pull Requests
 
-> Todavía no hay PRs (Entrega 1, solo documentación). Estos son los prompts previstos para preparar y revisar las PRs a partir de la Entrega 2.
+> Desde la Entrega 2, cada ticket se cierra con una PR de su rama hacia `main` **dentro de mi repositorio**. No son la entrega, que es rama + Typeform. PRs hasta ahora: #1 (JP-BE-01), #2 (JP-DB-01), #3 (JP-BE-02) y #4 (JP-BE-03).
 
-**Prompt 1:** ⏳ (Entrega 2) Descripción de la PR
+**Prompt 1:** Descripción de la PR. *En la práctica la sustituye la fase 5 de `/ticket`: su resumen (qué se ha hecho, tests, decisiones y cambios en el readme) es la descripción de cada PR. El título es el mensaje del commit en Conventional Commits.* Ajuste humano: comprobar en cada PR que el destino es mi `main` y no el repositorio original de LIDR (es un fork), porque, al ser un fork, GitHub puede proponer el repositorio original como destino.
 
 ```
 A partir del diff de esta rama y del ticket [ID] del readme.md, redacta la
