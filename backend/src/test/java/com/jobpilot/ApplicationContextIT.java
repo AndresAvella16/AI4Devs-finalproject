@@ -2,19 +2,20 @@ package com.jobpilot;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.jobpilot.ai.FakeLlmGateway;
+import com.jobpilot.ai.LlmGateway;
+import com.jobpilot.support.EmptyDatabases;
 import com.jobpilot.support.PostgresTestcontainer;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
-import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.testcontainers.junit.jupiter.Container;
@@ -33,8 +34,6 @@ class ApplicationContextIT {
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    private static final AtomicInteger DATABASES = new AtomicInteger();
-
     @ParameterizedTest
     @ValueSource(strings = {"dev", "e2e", "prod"})
     void arrancaConCadaPerfilContraPostgres16(String profile) throws Exception {
@@ -46,6 +45,16 @@ class ApplicationContextIT {
                 assertThat(connection.getMetaData().getDatabaseProductName()).isEqualTo("PostgreSQL");
                 assertThat(connection.getMetaData().getDatabaseMajorVersion()).isEqualTo(16);
             }
+        }
+    }
+
+    /** JP-BE-03: sin LLM_MODE ni ANTHROPIC_API_KEY, todos los perfiles arrancan con el LLM simulado. */
+    @ParameterizedTest
+    @ValueSource(strings = {"dev", "e2e", "prod"})
+    void arrancaConCadaPerfilEnModoFakeSinApiKey(String profile) throws Exception {
+        try (ConfigurableApplicationContext context = start(profile)) {
+            assertThat(context.getBean(LlmGateway.class)).isInstanceOf(FakeLlmGateway.class);
+            assertThat(context.getBeanProvider(ChatModel.class).getIfAvailable()).isNull();
         }
     }
 
@@ -65,28 +74,17 @@ class ApplicationContextIT {
         }
     }
 
-    /**
-     * Cada arranque usa una base de datos nueva y vacía. No se puede compartir una entre perfiles: después de dev
-     * (que aplica el seed repetible), Flyway se niega, con razón, a arrancar e2e o prod sobre esa BD.
-     */
+    /** Cada arranque usa una base de datos nueva y vacía (ver {@link EmptyDatabases}). */
     private static ConfigurableApplicationContext start(String profile) throws Exception {
         return new SpringApplicationBuilder(JobPilotApplication.class)
                 .profiles(profile)
                 .run("--server.port=0",
-                        "--DB_URL=" + emptyDatabaseUrl(profile),
+                        "--DB_URL=" + EmptyDatabases.create(POSTGRES, "ctx_" + profile),
                         "--POSTGRES_USER=" + POSTGRES.getUsername(),
                         "--POSTGRES_PASSWORD=" + POSTGRES.getPassword(),
-                        "--JWT_SECRET=test-only-secreto-jwt-ficticio-de-al-menos-32-bytes");
-    }
-
-    private static String emptyDatabaseUrl(String profile) throws Exception {
-        String name = "ctx_" + profile + "_" + DATABASES.incrementAndGet();
-        try (Connection connection = DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-                Statement statement = connection.createStatement()) {
-            statement.execute("CREATE DATABASE " + name);
-        }
-        return "jdbc:postgresql://" + POSTGRES.getHost() + ":" + POSTGRES.getMappedPort(5432) + "/" + name;
+                        "--JWT_SECRET=test-only-secreto-jwt-ficticio-de-al-menos-32-bytes",
+                        // Sin key aunque la máquina (o el .env que importa dev) tenga una.
+                        "--ANTHROPIC_API_KEY=");
     }
 
     /** Código de estado sin seguir redirecciones (el HttpClient por defecto no las sigue). */

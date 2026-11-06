@@ -1,0 +1,3 @@
+# Decide antes de la autoconfiguración si se activa el cliente de Anthropic (llm.mode = fake | real).
+org.springframework.boot.EnvironmentPostProcessor=\
+com.jobpilot.ai.LlmModeEnvironmentPostProcessor
