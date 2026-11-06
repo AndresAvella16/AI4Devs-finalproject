@@ -1,0 +1,20 @@
+# Perfil prod: todas las variables sensibles son obligatorias y sin valor por defecto.
+# Si falta alguna o está vacía, RequiredEnvironmentCheck impide que la aplicación arranque.
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+
+logging:
+  level:
+    root: INFO
+    com.jobpilot: INFO
+
+# Sin documentación interactiva en producción (en dev y e2e sigue activa).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

@@ -1,0 +1,39 @@
+# Configuración común a todos los perfiles (dev, e2e, prod).
+# Los valores sensibles se leen SIEMPRE de variables de entorno (ver .env.example); nunca se escriben aquí.
+
+spring:
+  application:
+    name: jobpilot
+  datasource:
+    url: ${DB_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # el esquema solo lo cambia Flyway
+  mvc:
+    log-request-details: false    # nunca registrar cuerpos ni parámetros: hay CVs con datos personales
+
+server:
+  error:                          # el manejo de errores real está en GlobalExceptionHandler
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

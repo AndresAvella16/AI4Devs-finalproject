@@ -170,12 +170,14 @@ POSTGRES_PASSWORD=
 DB_URL=jdbc:postgresql://localhost:5432/jobpilot
 
 # Seguridad
-JWT_SECRET=                 # mínimo 32 caracteres aleatorios
+# Mínimo 32 caracteres aleatorios
+JWT_SECRET=
 JWT_EXPIRATION_MINUTES=60
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 # IA
-LLM_MODE=fake               # fake | real
+# fake | real
+LLM_MODE=fake
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
 
@@ -355,7 +357,7 @@ AI4Devs-finalproject/
 │       │   │   ├── ai/              # LlmGateway (puerto), SpringAiLlmGateway, FakeLlmGateway
 │       │   │   └── shared/          # config, seguridad, manejo global de errores, auditoría
 │       │   └── resources/
-│       │       ├── application.yml  # + application-dev.yml, application-e2e.yml
+│       │       ├── application.yml  # + application-dev.yml, application-e2e.yml, application-prod.yml
 │       │       ├── db/migration/    # V1__init_schema.sql, V2__...
 │       │       ├── db/seed/         # R__demo_data.sql (solo perfil dev)
 │       │       └── prompts/         # extract-cv.st, extract-offer.st, match.st, cover-letter.st
@@ -828,6 +830,21 @@ API REST con versión en la ruta (`/api/v1`), JSON, autenticación Bearer JWT y 
 Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 
 **Errores de IA** (endpoints marcados con 🤖): `429` límite por usuario superado · `502` `LlmInvalidResponse` (respuesta no válida tras un reintento) · `503` `LlmOverloaded` (concurrencia agotada o proveedor saturado, con `Retry-After`) · `504` `LlmTimeout`.
+
+**Tipos de error** (`ProblemDetail`, RFC 9457). Todas las respuestas de error usan `application/problem+json`, con `instance` = ruta de la petición y nunca trazas ni mensajes internos. El campo `type` vale `https://jobpilot.dev/problems/<slug>`:
+
+| Estado | `slug` | `title` | Cuándo |
+|---|---|---|---|
+| 400 | `validation-error` | Datos de entrada no válidos | Falla Bean Validation; incluye `errors: [{field, message}]` |
+| 400 | `malformed-request` | Petición mal formada | El cuerpo no es un JSON válido o no tiene el formato esperado |
+| 404 | `not-found` | Recurso no encontrado | El recurso no existe o es de otro usuario |
+| 409 | *(uno por caso)* | *(uno por caso)* | Conflicto de negocio, p. ej. `invalid-status-transition` · "Transición de estado no permitida" |
+| 500 | `internal-error` | Error interno | Error no controlado (la traza solo va al log) |
+| 502 | `llm-invalid-response` | Respuesta de la IA no válida | `LlmInvalidResponse` |
+| 503 | `llm-overloaded` | La IA está saturada | `LlmOverloaded`, con la cabecera `Retry-After` (segundos) |
+| 504 | `llm-timeout` | La IA no ha respondido a tiempo | `LlmTimeout` |
+
+Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de ruta inexistente…) también se devuelven como `ProblemDetail`, con el `type` por defecto (`about:blank`) y el título estándar de HTTP. El slug de `401` lo fija JP-BE-02 y el de `429`, el ticket de límite de peticiones.
 
 | Método | Ruta | Cuerpo | Respuesta OK | Otros errores | Funcionalidad |
 |---|---|---|---|---|---|
