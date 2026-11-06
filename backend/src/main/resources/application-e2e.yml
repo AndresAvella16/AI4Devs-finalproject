@@ -1,0 +1,6 @@
+# Perfil e2e: tests E2E con Playwright contra docker-compose.e2e.yml (JP-QA-01 / JP-OPS-01).
+# JP-DB-01 añadirá la BD limpia + seed de E2E y JP-BE-03 fijará llm.mode=fake.
+
+logging:
+  level:
+    com.jobpilot: INFO
