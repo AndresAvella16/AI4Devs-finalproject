@@ -13,6 +13,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.method.ParameterErrors;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,6 +45,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     ProblemDetail handleConflict(ConflictException ex, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, ProblemTypes.of(ex.getTypeSlug()), ex.getTitle(), ex.getMessage(), request);
+    }
+
+    // ---- Autenticación (401, siempre con WWW-Authenticate: Bearer) ----
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ResponseEntity<ProblemDetail> handleInvalidCredentials(InvalidCredentialsException ex,
+            HttpServletRequest request) {
+        return unauthorized(problem(HttpStatus.UNAUTHORIZED, ProblemTypes.INVALID_CREDENTIALS,
+                "Credenciales incorrectas", ex.getMessage(), request));
+    }
+
+    /** Lo reenvía aquí {@code ProblemDetailAuthenticationEntryPoint} desde los filtros de Spring Security. */
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ProblemDetail> handleAuthentication(AuthenticationException ex, HttpServletRequest request) {
+        log.debug("Petición no autenticada en {} {}: {}", request.getMethod(), request.getRequestURI(),
+                ex.getMessage());
+        return unauthorized(problem(HttpStatus.UNAUTHORIZED, ProblemTypes.UNAUTHORIZED, "No autenticado",
+                "Falta el token de acceso, no es válido o ha caducado.", request));
     }
 
     // ---- Errores del LLM: el mensaje de la excepción puede traer detalles del proveedor, solo va al log ----
@@ -145,6 +164,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .sorted(Comparator.comparing(FieldError::field).thenComparing(FieldError::message))
                 .toList());
         return createResponseEntity(body, headers, HttpStatus.BAD_REQUEST, request);
+    }
+
+    private static ResponseEntity<ProblemDetail> unauthorized(ProblemDetail body) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).header(HttpHeaders.WWW_AUTHENTICATE, "Bearer").body(body);
     }
 
     private static ProblemDetail problem(HttpStatus status, URI type, String title, String detail,

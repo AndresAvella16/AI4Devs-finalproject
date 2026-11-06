@@ -75,7 +75,8 @@ class ApplicationContextIT {
                 .run("--server.port=0",
                         "--DB_URL=" + emptyDatabaseUrl(profile),
                         "--POSTGRES_USER=" + POSTGRES.getUsername(),
-                        "--POSTGRES_PASSWORD=" + POSTGRES.getPassword());
+                        "--POSTGRES_PASSWORD=" + POSTGRES.getPassword(),
+                        "--JWT_SECRET=test-only-secreto-jwt-ficticio-de-al-menos-32-bytes");
     }
 
     private static String emptyDatabaseUrl(String profile) throws Exception {

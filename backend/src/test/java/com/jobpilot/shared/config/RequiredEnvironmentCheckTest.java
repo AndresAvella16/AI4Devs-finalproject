@@ -35,11 +35,12 @@ class RequiredEnvironmentCheckTest {
     }
 
     @Test
-    void elPerfilProdExigeLasVariablesDeLaBaseDeDatos() {
+    void elPerfilProdExigeLasVariablesDeLaBaseDeDatosYElSecretoJwt() {
         assertThatThrownBy(() -> new RequiredEnvironmentCheck(new MockEnvironment()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DB_URL")
                 .hasMessageContaining("POSTGRES_USER")
-                .hasMessageContaining("POSTGRES_PASSWORD");
+                .hasMessageContaining("POSTGRES_PASSWORD")
+                .hasMessageContaining("JWT_SECRET");
     }
 }

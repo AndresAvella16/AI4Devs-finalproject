@@ -14,7 +14,8 @@ import org.springframework.test.context.ActiveProfiles;
  * CA 6: el perfil prod aplica las migraciones pero no carga los datos de prueba. Las variables obligatorias se
  * rellenan solo para superar RequiredEnvironmentCheck; la conexión real la aporta Testcontainers.
  */
-@SpringBootTest(properties = {"DB_URL=jdbc:postgresql://ignorado", "POSTGRES_USER=ignorado", "POSTGRES_PASSWORD=ignorado"})
+@SpringBootTest(properties = {"DB_URL=jdbc:postgresql://ignorado", "POSTGRES_USER=ignorado", "POSTGRES_PASSWORD=ignorado",
+        "JWT_SECRET=test-only-secreto-jwt-ficticio-de-al-menos-32-bytes"})
 @ActiveProfiles("prod")
 @Import(PostgresTestcontainer.class)
 class ProdNoSeedIT {

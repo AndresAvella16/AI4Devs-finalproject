@@ -10,13 +10,13 @@ import org.springframework.util.StringUtils;
 /**
  * En el perfil {@code prod}, impide que la aplicación arranque si falta alguna variable de entorno obligatoria
  * o está vacía. Se comprueba al crear el bean, antes que la conexión a la base de datos, para dar un mensaje claro.
- * Los tickets que añadan secretos nuevos (JWT, Anthropic…) deben añadirlos a {@link #PROD_REQUIRED}.
+ * Los tickets que añadan secretos nuevos (p. ej. ANTHROPIC_API_KEY con LLM_MODE=real) deben añadirlos a {@link #PROD_REQUIRED}.
  */
 @Component
 @Profile("prod")
 public class RequiredEnvironmentCheck {
 
-    static final List<String> PROD_REQUIRED = List.of("DB_URL", "POSTGRES_USER", "POSTGRES_PASSWORD");
+    static final List<String> PROD_REQUIRED = List.of("DB_URL", "POSTGRES_USER", "POSTGRES_PASSWORD", "JWT_SECRET");
 
     @Autowired
     public RequiredEnvironmentCheck(Environment environment) {
