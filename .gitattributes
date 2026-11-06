@@ -1,0 +1,17 @@
+# Finales de línea: LF en el repositorio para todo el texto
+* text=auto eol=lf
+
+# Scripts de Windows con CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Maven Wrapper para Linux (CI y Docker) siempre con LF
+mvnw text eol=lf
+
+# Binarios
+*.png binary
+*.jpg binary
+*.pdf binary
+*.jar binary
+*.ico binary
