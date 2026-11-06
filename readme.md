@@ -307,6 +307,7 @@ flowchart LR
 |---|---|---|
 | Lenguaje backend | **Java 21** (LTS) | Es el lenguaje que domino; *records*, *pattern matching* y *virtual threads*. |
 | Framework backend | **Spring Boot 4** + Spring Security + Spring Data JPA | Estándar del mercado Java; Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026. |
+| Autenticación | **Spring Security OAuth2 Resource Server** (Nimbus JOSE + JWT) | Emite y valida los JWT HS256 con `JwtEncoder`/`JwtDecoder` de Spring, sin librerías JWT de terceros ni un filtro propio; compatible con el Jackson 3 de Spring Boot 4. |
 | Integración IA | **Spring AI 2.0** (`spring-ai-starter-model-anthropic`) con **Claude** | Abstracción oficial de Spring para LLMs; Spring AI 2.0 requiere Spring Boot 4. |
 | Base de datos | **PostgreSQL 16** + **Flyway** | Relacional, ACID, JSONB para los campos semiestructurados y migraciones versionadas. |
 | Frontend | **React 19** + **TypeScript** + **Vite** | SPA moderna y tipada; React es lo más demandado junto a Java en las ofertas. |
@@ -325,7 +326,7 @@ flowchart LR
 | Estilos | Tailwind CSS | Estilos utilitarios y diseño responsive. |
 | **API REST** | Spring Boot 4 (Spring Web), Java 21 | Endpoints `/api/v1/**`, DTOs como `record`, validación con Bean Validation y errores en formato RFC 9457 (`ProblemDetail`). |
 | Documentación API | springdoc-openapi | Genera el contrato OpenAPI y Swagger UI a partir del código. |
-| **Seguridad** | Spring Security, JJWT, BCrypt | Registro/login, emisión y validación de JWT, API sin estado, CORS. |
+| **Seguridad** | Spring Security, OAuth2 Resource Server (Nimbus), BCrypt | Registro/login, emisión (`JwtEncoder`) y validación (`JwtDecoder`) de JWT, API sin estado, CORS. |
 | **Módulo `profile`** | PDFBox + `LlmGateway` | Extrae el texto del CV y lo estructura en un perfil editable. |
 | **Módulo `offer`** | `LlmGateway` | Extrae los requisitos de la oferta pegada. |
 | **Módulo `analysis`** | `LlmGateway` + `MatchScoreCalculator` | El LLM clasifica cada requisito; `MatchScoreCalculator` (Java puro, sin dependencias) calcula la puntuación. |
@@ -438,7 +439,7 @@ flowchart LR
 | **Subida de ficheros** | Solo se aceptan PDF de hasta 5 MB; se comprueba el tipo MIME y la firma `%PDF`. El fichero no se guarda en disco: se extrae su texto y se descarta. |
 | **Mitigación de *prompt injection*** | El texto del CV y de la oferta se envía delimitado y marcado como *datos* en el prompt de sistema. El modelo no tiene herramientas ni acceso a nada. Su respuesta se valida contra un esquema estricto antes de usarla, y la puntuación la calcula Java, no el modelo. |
 | **Sin SSRF** | El backend nunca descarga la URL que introduce el usuario; solo la guarda como texto. |
-| **Límite de peticiones** | Única fuente de verdad del límite de uso de la IA. Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. |
+| **Límite de peticiones** | Única fuente de verdad de los límites de uso (IA y login). Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. **Login:** máximo 10 intentos por minuto por IP + email en `POST /auth/login`, también con Bucket4j; si se supera, `429` con `Retry-After`, para frenar los ataques de fuerza bruta. Se implementa en JP-BE-05. |
 | **CORS** | Solo se permite el origen del frontend (`CORS_ALLOWED_ORIGINS`). |
 | **Gestión de secretos** | Variables de entorno; `.env` está en `.gitignore` y `.env.example` va con los valores vacíos. |
 | **Errores seguros** | Manejador global (`@RestControllerAdvice`) que devuelve `ProblemDetail` sin trazas internas. |
@@ -473,6 +474,12 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 **Validación con el LLM real (manual / *smoke*, fuera de la CI)**
 
 - Una prueba etiquetada `@Tag("llm-live")` ejecuta la extracción con el modelo real sobre 3 ofertas de ejemplo y valida con criterios flexibles: el JSON cumple el esquema, hay al menos un requisito obligatorio, la modalidad es un valor válido y cada evidencia aparece en el texto del CV.
+
+**Deuda técnica conocida**
+
+- **`save()` de Spring Data hace `merge` en las entidades nuevas.** Los UUID se asignan en el constructor, así que Spring Data no distingue una entidad nueva de una existente y ejecuta un `SELECT` antes de cada `INSERT`. Funciona, pero cuesta una consulta de más. Se resolverá con una clase base que implemente `Persistable` (JP-DB-01).
+- **El login aún no limita los intentos.** `POST /auth/login` no tiene límite de peticiones, así que se puede probar contraseñas por fuerza bruta (el coste 12 de BCrypt solo lo frena). Se resolverá en JP-BE-05 con Bucket4j: 10 intentos por minuto por IP + email → `429` (ver 2.5) (JP-BE-02).
+- **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
 
 ---
 
@@ -837,18 +844,21 @@ Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 |---|---|---|---|
 | 400 | `validation-error` | Datos de entrada no válidos | Falla Bean Validation; incluye `errors: [{field, message}]` |
 | 400 | `malformed-request` | Petición mal formada | El cuerpo no es un JSON válido o no tiene el formato esperado |
+| 401 | `unauthorized` | No autenticado | Falta el token, no es válido o ha caducado; con la cabecera `WWW-Authenticate: Bearer` |
+| 401 | `invalid-credentials` | Credenciales incorrectas | Login con email o contraseña incorrectos; misma respuesta exista o no el email |
 | 404 | `not-found` | Recurso no encontrado | El recurso no existe o es de otro usuario |
-| 409 | *(uno por caso)* | *(uno por caso)* | Conflicto de negocio, p. ej. `invalid-status-transition` · "Transición de estado no permitida" |
+| 409 | `email-already-registered` | Email ya registrado | Registro con un email que ya existe (sin distinguir mayúsculas) |
+| 409 | *(uno por caso)* | *(uno por caso)* | Otros conflictos de negocio, p. ej. `invalid-status-transition` · "Transición de estado no permitida" |
 | 500 | `internal-error` | Error interno | Error no controlado (la traza solo va al log) |
 | 502 | `llm-invalid-response` | Respuesta de la IA no válida | `LlmInvalidResponse` |
 | 503 | `llm-overloaded` | La IA está saturada | `LlmOverloaded`, con la cabecera `Retry-After` (segundos) |
 | 504 | `llm-timeout` | La IA no ha respondido a tiempo | `LlmTimeout` |
 
-Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de ruta inexistente…) también se devuelven como `ProblemDetail`, con el `type` por defecto (`about:blank`) y el título estándar de HTTP. El slug de `401` lo fija JP-BE-02 y el de `429`, el ticket de límite de peticiones.
+Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de ruta inexistente…) también se devuelven como `ProblemDetail`, con el `type` por defecto (`about:blank`) y el título estándar de HTTP. El slug de `429` lo fija JP-BE-05 (límite de peticiones).
 
 | Método | Ruta | Cuerpo | Respuesta OK | Otros errores | Funcionalidad |
 |---|---|---|---|---|---|
-| POST | `/auth/register` · `/auth/login` | email, password (+ fullName en registro) | 201 / 200 con JWT | 400, 401, 409 (email ya registrado) | Autenticación |
+| POST | `/auth/register` · `/auth/login` (públicos) | `RegisterRequest` · `LoginRequest` | 201 / 200 `AuthResponse` | 400, 401 (login), 409 (email ya registrado), 429 (login: demasiados intentos, ver 2.5; pendiente de JP-BE-05) | Autenticación |
 | POST | `/profile/cv` 🤖 | multipart (`file`, PDF ≤ 5 MB) | 200 `CvDraftResponse`. Guarda `cv_raw_text` y `cv_file_name` y devuelve el **borrador** del perfil, **sin guardarlo** | 400, 415 | F1 — Subir CV y obtener el borrador |
 | GET | `/profile` | — | 200 `ProfileResponse` | 404 (aún no hay perfil) | F1 — Consultar el perfil |
 | PUT | `/profile` | `ProfileRequest` | **201** la primera vez (crea el perfil, sirve también para el perfil hecho a mano) · **200** después (lo reemplaza) | 400 | F1 — Guardar el perfil revisado |
@@ -1232,6 +1242,37 @@ components:
               editedByUser: { type: boolean }
               createdAt: { type: string, format: date-time }
 
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email: { type: string, format: email, maxLength: 254, description: Se guarda en minúsculas }
+        password:
+          type: string
+          minLength: 8
+          description: Al menos una letra y un número; como máximo 72 bytes en UTF-8 (límite de BCrypt)
+        fullName: { type: string, minLength: 1, maxLength: 120 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, description: Sin distinguir mayúsculas }
+        password: { type: string }
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string, description: 'JWT HS256 (sub = id del usuario, iss = jobpilot)' }
+        tokenType: { type: string, enum: [Bearer] }
+        expiresIn: { type: integer, description: Segundos de validez del token, example: 3600 }
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string, format: email }
+            fullName: { type: string }
+
     ProblemDetail:
       type: object
       properties:
@@ -1543,7 +1584,7 @@ Escenario: Seguimiento vencido
 | JP-BE-02 | Backend | Registro, login y filtro JWT | — | 3 |
 | JP-BE-03 | Backend | Puerto `LlmGateway`, adaptador Spring AI y `FakeLlmGateway` | 1–4 | 3 |
 | JP-BE-04 | Backend | Subida de CV y extracción de perfil | HU-01 | 5 |
-| JP-BE-05 | Backend | Importación de ofertas y extracción de requisitos | HU-02 | 3 |
+| JP-BE-05 | Backend | Importación de ofertas y extracción de requisitos + límite de peticiones (Bucket4j: IA y login, ver 2.5) | HU-02 | 3 |
 | **JP-BE-06** | **Backend** | **Análisis de encaje: `MatchScoreCalculator` y endpoint** | HU-03 | 5 |
 | JP-BE-07 | Backend | Generación, versionado y exportación PDF de documentos | HU-04 | 5 |
 | JP-BE-08 | Backend | API de candidaturas y política de transiciones | HU-05 | 3 |

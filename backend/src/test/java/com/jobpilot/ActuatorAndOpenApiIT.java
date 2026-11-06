@@ -5,7 +5,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jobpilot.auth.service.TokenService;
 import com.jobpilot.support.PostgresTestcontainer;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -22,6 +25,14 @@ class ActuatorAndOpenApiIT {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private TokenService tokens;
+
+    /** Con token válido, para que un 404 signifique "no existe" y no "no autenticado". */
+    private String bearer() {
+        return "Bearer " + tokens.issue(UUID.randomUUID()).value();
+    }
 
     @Test
     void healthDevuelveUpSinDetalles() throws Exception {
@@ -35,7 +46,7 @@ class ActuatorAndOpenApiIT {
     @ParameterizedTest
     @ValueSource(strings = {"/actuator/info", "/actuator/env", "/actuator/beans", "/actuator/configprops"})
     void elRestoDeEndpointsDeActuatorNoEstanExpuestos(String path) throws Exception {
-        mockMvc.perform(get(path)).andExpect(status().isNotFound());
+        mockMvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer())).andExpect(status().isNotFound());
     }
 
     @Test
@@ -57,7 +68,7 @@ class ActuatorAndOpenApiIT {
 
     @Test
     void unaRutaInexistenteDevuelve404ComoProblemDetail() throws Exception {
-        mockMvc.perform(get("/api/v1/no-existe"))
+        mockMvc.perform(get("/api/v1/no-existe").header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.instance").value("/api/v1/no-existe"));

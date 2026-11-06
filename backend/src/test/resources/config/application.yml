@@ -1,0 +1,6 @@
+# Solo en el classpath de test. Tiene prioridad sobre src/main/resources/application.yml.
+# Secreto JWT FICTICIO para los tests: no vale para nada fuera de ellos. Los secretos reales nunca se versionan.
+jobpilot:
+  security:
+    jwt:
+      secret: test-only-secreto-jwt-ficticio-de-al-menos-32-bytes

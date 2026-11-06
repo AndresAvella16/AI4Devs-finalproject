@@ -9,6 +9,8 @@ public final class ProblemTypes {
 
     public static final URI VALIDATION_ERROR = of("validation-error");
     public static final URI MALFORMED_REQUEST = of("malformed-request");
+    public static final URI UNAUTHORIZED = of("unauthorized");
+    public static final URI INVALID_CREDENTIALS = of("invalid-credentials");
     public static final URI NOT_FOUND = of("not-found");
     public static final URI LLM_TIMEOUT = of("llm-timeout");
     public static final URI LLM_OVERLOADED = of("llm-overloaded");
