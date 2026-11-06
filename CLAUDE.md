@@ -16,7 +16,7 @@ El usuario sube su CV, pega ofertas de trabajo y obtiene un análisis de encaje,
 |---|---|
 | Backend | Java 21, **Spring Boot 4.1.x**, Spring Web, Spring Security, Spring Data JPA, Bean Validation, Actuator, springdoc-openapi |
 | IA | **Spring AI 2.0** (`spring-ai-starter-model-anthropic`), modelo Claude |
-| BD | PostgreSQL 16, Flyway (`flyway-core` + `flyway-database-postgresql`) |
+| BD | PostgreSQL 16, Flyway (`spring-boot-starter-flyway` + `flyway-database-postgresql`; en Boot 4 `flyway-core` solo no activa la autoconfiguración) |
 | Utilidades backend | JJWT, Bucket4j, Apache PDFBox, CommonMark, OpenHTMLtoPDF |
 | Frontend | React 19, TypeScript (strict), Vite, React Router, TanStack Query, React Hook Form + Zod, Tailwind CSS, dnd-kit |
 | Tests | JUnit 5, AssertJ, Mockito, Testcontainers, MockMvc · Vitest, React Testing Library, MSW · Playwright for Java (`e2e/`) |

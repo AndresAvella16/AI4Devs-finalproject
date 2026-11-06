@@ -486,7 +486,7 @@ erDiagram
     PROFILES ||--o{ PROFILE_SKILLS : "incluye"
     PROFILES ||--o{ EXPERIENCES : "incluye"
     USERS ||--o{ JOB_OFFERS : "importa"
-    JOB_OFFERS ||--|{ OFFER_REQUIREMENTS : "contiene"
+    JOB_OFFERS ||--o{ OFFER_REQUIREMENTS : "contiene"
     JOB_OFFERS ||--o{ MATCH_ANALYSES : "se analiza en"
     PROFILES ||--o{ MATCH_ANALYSES : "se compara en"
     MATCH_ANALYSES ||--|{ REQUIREMENT_MATCHES : "detalla"
@@ -620,7 +620,7 @@ erDiagram
 
 ### **3.2. Descripción de entidades principales:**
 
-> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC, con `DEFAULT now()`. Los borrados se propagan en cascada desde el usuario. PostgreSQL no indexa las claves foráneas automáticamente, así que cada FK tiene un índice que empieza por ella (ver [Índices](#índices)). Las restricciones que no caben en un `UNIQUE` normal (unicidad sin distinguir mayúsculas, coherencia entre tablas) se implementan como índices únicos de expresión o como claves foráneas compuestas, y se indican así en las tablas.
+> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC, con `DEFAULT now()`. Los borrados se propagan en cascada desde el usuario. PostgreSQL no indexa las claves foráneas automáticamente, así que cada FK tiene un índice que la cubre, es decir, que empieza por sus columnas o permite buscar por ellas (ver [Índices](#índices)). Las restricciones que no caben en un `UNIQUE` normal (unicidad sin distinguir mayúsculas, coherencia entre tablas) se implementan como índices únicos de expresión o como claves foráneas compuestas, y se indican así en las tablas.
 
 #### `users` — Usuario de la aplicación
 
@@ -1567,7 +1567,7 @@ Crear la migración inicial de Flyway con todas las tablas del modelo de datos (
 
 **Alcance**
 
-1. Añadir `flyway-core` y `flyway-database-postgresql` al `pom.xml` y configurar `spring.flyway.locations` (`classpath:db/migration` siempre; además `classpath:db/seed` en el perfil `dev`).
+1. Añadir `spring-boot-starter-flyway` (incluye `flyway-core`; en Spring Boot 4 la autoconfiguración de Flyway está en su propio módulo) y `flyway-database-postgresql` al `pom.xml` y configurar `spring.flyway.locations` (`classpath:db/migration` siempre; además `classpath:db/seed` en el perfil `dev`).
 2. Crear `V1__init_schema.sql` con las 11 tablas: `users`, `profiles`, `profile_skills`, `experiences`, `job_offers`, `offer_requirements`, `match_analyses`, `requirement_matches`, `generated_documents`, `applications`, `application_status_history`.
 3. Definir para cada tabla:
    - PK `UUID`; FKs con `ON DELETE CASCADE` según la sección 3.2.
@@ -1580,7 +1580,7 @@ Crear la migración inicial de Flyway con todas las tablas del modelo de datos (
      - Claves únicas de destino (`job_offers (id, user_id)`, `offer_requirements (offer_id, id)`, `match_analyses (offer_id, id)`) y las **FKs compuestas** de `applications` y `requirement_matches`.
      - `applications`: `CHECK (board_position >= 0)` y `applied_at` obligatorio en ENVIADA, ENTREVISTA y OFERTA.
      - `application_status_history`: `CHECK (from_status IS DISTINCT FROM to_status)`.
-   - Índices: los de la tabla [Índices](#índices) de la sección 3.2 (cada FK tiene un índice que empieza por ella).
+   - Índices: los de la tabla [Índices](#índices) de la sección 3.2 (cada FK tiene un índice que la cubre: que empieza por sus columnas o permite buscar por ellas).
 4. Crear `db/seed/R__demo_data.sql` (migración repetible) con: el usuario `demo@jobpilot.dev` (hash BCrypt de `Demo1234!`), un perfil completo con 8 habilidades y 2 experiencias, 3 ofertas con requisitos y análisis (puntuaciones 42, 68 y 85) y 3 candidaturas en GUARDADA, ENVIADA (con seguimiento vencido) y ENTREVISTA. Las dos últimas llevan `applied_at`, que la restricción exige, y el email del usuario va en minúsculas. Debe poder ejecutarse varias veces sin duplicar datos (`ON CONFLICT DO NOTHING`).
 5. Mapear las entidades JPA con `spring.jpa.hibernate.ddl-auto=validate`, de modo que Hibernate falle al arrancar si el código y el esquema no coinciden.
 
