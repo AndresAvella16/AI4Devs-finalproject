@@ -179,6 +179,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 # fake | real
 LLM_MODE=fake
 ANTHROPIC_API_KEY=
+# Vacío = claude-sonnet-5-5
 ANTHROPIC_MODEL=
 
 # Frontend
@@ -289,8 +290,8 @@ flowchart LR
 
 - **Escalado conjunto:** no se puede escalar solo la parte de IA (la más costosa en latencia); toda la app escala junta.
 - **Llamadas síncronas al LLM:** la extracción y el análisis tardan varios segundos y se ejecutan dentro de la petición HTTP. Para el MVP es aceptable (la UI muestra un estado de carga), con estas mitigaciones mínimas:
-  - **Timeout** en el cliente HTTP del LLM. Si se supera, se responde `504` (`LlmTimeout`).
-  - **Concurrencia limitada:** un máximo de 3 llamadas simultáneas al LLM (ver 2.5). Si están todas ocupadas, o el proveedor está saturado, se responde `503` con `Retry-After` (`LlmOverloaded`).
+  - **Timeout** de 60 s en el cliente HTTP del LLM, sin reintentos de red. Si se supera, se responde `504` (`LlmTimeout`).
+  - **Concurrencia limitada:** un máximo de 3 llamadas simultáneas al LLM (ver 2.5). Si están todas ocupadas, se responde al momento `503` con `Retry-After: 10`; si el proveedor está saturado (HTTP 429, 529 u otro 5xx) o no es accesible, `503` con el `Retry-After` que indique o, si no lo indica, 30 s (`LlmOverloaded`).
   - **Respuesta no válida** tras un reintento: se responde `502` (`LlmInvalidResponse`).
   - Las llamadas al LLM se hacen **fuera de la transacción de base de datos**, para no tener conexiones bloqueadas mientras el modelo responde.
   - A futuro se podría pasar a procesamiento asíncrono con una cola y *polling* o SSE.
@@ -308,7 +309,7 @@ flowchart LR
 | Lenguaje backend | **Java 21** (LTS) | Es el lenguaje que domino; *records*, *pattern matching* y *virtual threads*. |
 | Framework backend | **Spring Boot 4** + Spring Security + Spring Data JPA | Estándar del mercado Java; Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026. |
 | Autenticación | **Spring Security OAuth2 Resource Server** (Nimbus JOSE + JWT) | Emite y valida los JWT HS256 con `JwtEncoder`/`JwtDecoder` de Spring, sin librerías JWT de terceros ni un filtro propio; compatible con el Jackson 3 de Spring Boot 4. |
-| Integración IA | **Spring AI 2.0** (`spring-ai-starter-model-anthropic`) con **Claude** | Abstracción oficial de Spring para LLMs; Spring AI 2.0 requiere Spring Boot 4. |
+| Integración IA | **Spring AI 2.0.2** (`spring-ai-starter-model-anthropic`) con **Claude** — por defecto `claude-sonnet-5-5`, `max-tokens` 4096, configurable con `ANTHROPIC_MODEL` | Abstracción oficial de Spring para LLMs; Spring AI 2.0 requiere Spring Boot 4 (la 2.0.2 está compilada contra Boot 4.1.2). Sonnet es más barato y rápido que Opus y suficiente para extracción y encaje. |
 | Base de datos | **PostgreSQL 16** + **Flyway** | Relacional, ACID, JSONB para los campos semiestructurados y migraciones versionadas. |
 | Frontend | **React 19** + **TypeScript** + **Vite** | SPA moderna y tipada; React es lo más demandado junto a Java en las ofertas. |
 | UI / estado | Tailwind CSS · TanStack Query · React Hook Form + Zod · dnd-kit | Productividad, caché del servidor, formularios validados y kanban accesible. |
@@ -332,7 +333,7 @@ flowchart LR
 | **Módulo `analysis`** | `LlmGateway` + `MatchScoreCalculator` | El LLM clasifica cada requisito; `MatchScoreCalculator` (Java puro, sin dependencias) calcula la puntuación. |
 | **Módulo `document`** | `LlmGateway`, CommonMark, OpenHTMLtoPDF | Genera la carta y el CV adaptado en Markdown, versiona los cambios y exporta a PDF. |
 | **Módulo `tracker`** | Spring Data JPA | Candidaturas, reglas de transición de estado (`ApplicationStatusPolicy`) e historial de cambios. |
-| **Módulo `ai`** | Spring AI (`ChatClient` + salida estructurada) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st`, conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. |
+| **Módulo `ai`** | Spring AI (`ChatModel` + `BeanOutputConverter`) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st` (con las reglas comunes en `_system-base.st`), conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. `LLM_MODE` (`fake` por defecto, o `real`) elige el adaptador; en `real`, sin `ANTHROPIC_API_KEY` la app no arranca. |
 | **Persistencia** | PostgreSQL 16, Spring Data JPA (Hibernate), Flyway | Modelo relacional, migraciones versionadas y datos de prueba. |
 | **Tests** | JUnit 5, Mockito, AssertJ, Testcontainers, MockMvc, Vitest, React Testing Library, MSW, Playwright for Java | Ver sección 2.6. |
 | **CI** | GitHub Actions | Build, tests y lint en cada push y PR. |
@@ -361,10 +362,11 @@ AI4Devs-finalproject/
 │       │       ├── application.yml  # + application-dev.yml, application-e2e.yml, application-prod.yml
 │       │       ├── db/migration/    # V1__init_schema.sql, V2__...
 │       │       ├── db/seed/         # R__demo_data.sql (solo perfil dev)
-│       │       └── prompts/         # extract-cv.st, extract-offer.st, match.st, cover-letter.st
+│       │       ├── prompts/         # _system-base.st, extract-cv.st, extract-offer.st, match.st, cover-letter.st
+│       │       └── fake-llm/        # respuestas fijas del modo fake (JSON), usadas en dev, tests y E2E
 │       └── test/
 │           ├── java/com/jobpilot/   # unitarios (*Test) e integración (*IT)
-│           └── resources/fixtures/  # CVs de ejemplo y respuestas simuladas del LLM (JSON)
+│           └── resources/fixtures/  # CVs de ejemplo y variantes de respuesta solo para tests (JSON roto, campos que faltan…)
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.ts
@@ -480,6 +482,7 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 - **`save()` de Spring Data hace `merge` en las entidades nuevas.** Los UUID se asignan en el constructor, así que Spring Data no distingue una entidad nueva de una existente y ejecuta un `SELECT` antes de cada `INSERT`. Funciona, pero cuesta una consulta de más. Se resolverá con una clase base que implemente `Persistable` (JP-DB-01).
 - **El login aún no limita los intentos.** `POST /auth/login` no tiene límite de peticiones, así que se puede probar contraseñas por fuerza bruta (el coste 12 de BCrypt solo lo frena). Se resolverá en JP-BE-05 con Bucket4j: 10 intentos por minuto por IP + email → `429` (ver 2.5) (JP-BE-02).
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
+- **La variable de entorno `LLM_MODE` tiene prioridad sobre `application-e2e.yml`.** Spring Boot mapea `LLM_MODE` a `llm.mode`, y las variables de entorno ganan a los YAML de perfil: con `LLM_MODE=real` en el entorno, los tests E2E llamarían a la API de Anthropic y gastarían crédito. Se resolverá en JP-OPS-01 fijando `LLM_MODE=fake` en `docker-compose.e2e.yml` y, si es sencillo, haciendo que el perfil `e2e` se niegue a arrancar con `llm.mode=real` (JP-BE-03).
 
 ---
 
@@ -1670,7 +1673,7 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
    - `POST /api/v1/offers/{offerId}/analysis` → 201 + `AnalysisResponse`.
    - `GET /api/v1/offers/{offerId}/analysis` → último análisis o 404.
    - Límite de peticiones (Bucket4j, 30/h por usuario) y `Semaphore` de 3 llamadas simultáneas, compartidos con el resto de endpoints de IA (ver 2.5) → 429 / 503.
-5. **Fake** — `FakeLlmGateway` devuelve una evaluación fija leída de `fixtures/match-evaluation.json` para los tests de integración y E2E.
+5. **Fake** — `FakeLlmGateway` devuelve una evaluación fija leída de `src/main/resources/fake-llm/match-evaluation.json` para los tests de integración y E2E.
 
 **Criterios de aceptación**
 

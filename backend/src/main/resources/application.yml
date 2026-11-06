@@ -16,6 +16,15 @@ spring:
       ddl-auto: validate          # el esquema solo lo cambia Flyway
   mvc:
     log-request-details: false    # nunca registrar cuerpos ni parámetros: hay CVs con datos personales
+  ai:
+    # spring.ai.model.chat lo fija LlmModeEnvironmentPostProcessor a partir de llm.mode: no se configura aquí.
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}        # obligatoria solo con LLM_MODE=real
+      timeout: 60s                          # se supera → 504 llm-timeout
+      max-retries: 0                        # sin reintentos de red: el único reintento es el de respuesta no válida
+      chat:
+        model: ${ANTHROPIC_MODEL:}          # vacío → claude-sonnet-5-5 (LlmModeEnvironmentPostProcessor)
+        max-tokens: 4096
 
 server:
   error:                          # el manejo de errores real está en GlobalExceptionHandler
@@ -33,6 +42,13 @@ management:
     health:
       show-details: never
       show-components: never
+
+# IA (JP-BE-03). fake: respuestas fijas de fake-llm/*.json, sin API key · real: Claude a través de Spring AI.
+llm:
+  mode: ${LLM_MODE:fake}
+  max-concurrent-calls: 3               # llamadas simultáneas al LLM (sección 2.5)
+  busy-retry-after-seconds: 10          # Retry-After del 503 cuando no hay hueco
+  provider-retry-after-seconds: 30      # Retry-After del 503 cuando Anthropic está saturado y no indica uno
 
 jobpilot:
   security:
