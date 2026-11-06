@@ -8,6 +8,8 @@ spring:
     url: ${DB_URL}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
+  flyway:
+    locations: classpath:db/migration   # dev añade classpath:db/seed
   jpa:
     open-in-view: false
     hibernate:

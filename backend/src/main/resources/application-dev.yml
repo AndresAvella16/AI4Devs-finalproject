@@ -2,13 +2,17 @@
 # Lee las variables (POSTGRES_USER, POSTGRES_PASSWORD…) del .env de la raíz del repo, el mismo que usa
 # docker compose. La ruta es relativa al directorio de trabajo: arranca la app desde backend/.
 # Las variables de entorno del sistema tienen prioridad sobre el .env.
-# JP-DB-01 añadirá aquí la carga de db/seed.
+# Además de las migraciones, carga los datos de prueba de db/seed (usuario demo@jobpilot.dev).
 
 spring:
   config:
     import: optional:file:../.env[.properties]
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/jobpilot}
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/seed
 
 logging:
   level:
