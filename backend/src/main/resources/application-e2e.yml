@@ -2,7 +2,9 @@
 # JP-QA-01 añadirá el seed de E2E.
 
 llm:
-  mode: fake    # los E2E no llaman a la IA real (una variable de entorno LLM_MODE tendría prioridad sobre esto)
+  # Los E2E no llaman a la IA real. Una variable de entorno LLM_MODE tendría prioridad sobre este valor, así que
+  # docker-compose.e2e.yml fija LLM_MODE=fake y LlmModeEnvironmentPostProcessor rechaza LLM_MODE=real con este perfil.
+  mode: fake
 
 logging:
   level:

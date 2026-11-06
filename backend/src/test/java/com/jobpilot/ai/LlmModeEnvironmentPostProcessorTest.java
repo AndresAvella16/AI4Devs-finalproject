@@ -93,6 +93,47 @@ class LlmModeEnvironmentPostProcessorTest {
                 .hasMessageContaining("ANTHROPIC_API_KEY");
     }
 
+    // ---- Perfil e2e (JP-OPS-01): los E2E nunca llaman a la IA real ----
+
+    private StandardEnvironment processWithProfiles(Map<String, Object> properties, String... profiles) {
+        StandardEnvironment environment = environment(properties);
+        environment.setActiveProfiles(profiles);
+        processor.postProcessEnvironment(environment, new SpringApplication());
+        return environment;
+    }
+
+    @Test
+    void conElPerfilE2eYModoRealLaAppNoArrancaAunqueHayaApiKey() {
+        assertThatThrownBy(() -> processWithProfiles(
+                Map.of("llm.mode", "real", "spring.ai.anthropic.api-key", "sk-ant-ficticia"), "e2e"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("e2e")
+                .hasMessageContaining("LLM_MODE=fake");
+    }
+
+    @Test
+    void conElPerfilE2eEntreVariosPerfilesTambienSeRechazaElModoReal() {
+        assertThatThrownBy(() -> processWithProfiles(
+                Map.of("llm.mode", "real", "spring.ai.anthropic.api-key", "sk-ant-ficticia"), "dev", "e2e"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("e2e");
+    }
+
+    @Test
+    void conElPerfilE2eYModoFakeArrancaNormalmente() {
+        StandardEnvironment environment = processWithProfiles(Map.of("llm.mode", "fake"), "e2e");
+
+        assertThat(environment.getProperty(CHAT_PROVIDER)).isEqualTo("none");
+    }
+
+    @Test
+    void conOtroPerfilElModoRealSigueFuncionando() {
+        StandardEnvironment environment = processWithProfiles(
+                Map.of("llm.mode", "real", "spring.ai.anthropic.api-key", "sk-ant-ficticia"), "dev");
+
+        assertThat(environment.getProperty(CHAT_PROVIDER)).isEqualTo("anthropic");
+    }
+
     // ---- Valores no válidos ----
 
     @ParameterizedTest(name = "llm.mode \"{0}\"")

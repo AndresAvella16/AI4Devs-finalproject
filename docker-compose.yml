@@ -1,6 +1,9 @@
-# Entorno local. Lee las variables de .env (cópialo de .env.example y rellénalo).
-# De momento solo la base de datos; JP-OPS-01 añadirá backend y frontend.
-#   docker compose up -d postgres
+# Entorno local y de revisión (JP-OPS-01). Lee las variables de .env (cópialo de .env.example y rellénalo).
+#   docker compose up --build          # todo el stack: http://localhost:5173 (frontend) y :8080 (API)
+#   docker compose up -d postgres      # solo la base de datos, para desarrollar con mvnw y npm run dev
+#
+# El backend usa el perfil dev: aplica las migraciones y carga el seed (usuario demo@jobpilot.dev).
+# Los servicios arrancan en orden cuando el anterior está healthy: postgres → backend → frontend.
 
 services:
   postgres:
@@ -18,6 +21,39 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      # Dentro de la red de compose la BD es "postgres", no localhost (el DB_URL de .env es para mvnw en local).
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jobpilot}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env (mínimo 32 caracteres)}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      LLM_MODE: ${LLM_MODE:-fake}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

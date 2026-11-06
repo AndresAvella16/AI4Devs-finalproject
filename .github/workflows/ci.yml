@@ -1,0 +1,113 @@
+# CI de JobPilot (JP-OPS-01, readme 2.4): en cada push y PR.
+#   backend  → ./mvnw verify (unitarios + integración con Testcontainers)
+#   frontend → npm ci · lint · test · build
+#   e2e      → stack de docker-compose.e2e.yml (LLM_MODE=fake) + smoke test. JP-QA-01 añadirá Playwright.
+# Nunca llama a la API de Anthropic ni usa secretos del repositorio: las credenciales del E2E se generan aquí.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (mvnw verify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Unitarios + integración (Testcontainers)
+        run: ./mvnw -B -ntp verify
+
+      - name: Informes de tests
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: backend-test-reports
+          path: |
+            backend/target/surefire-reports/
+            backend/target/failsafe-reports/
+          retention-days: 7
+
+  frontend:
+    name: frontend (lint · test · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    name: e2e (docker compose + smoke test)
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Credenciales de un solo uso
+        run: |
+          for name in POSTGRES_USER POSTGRES_PASSWORD JWT_SECRET; do
+            case "$name" in
+              POSTGRES_USER) value="e2e_$(openssl rand -hex 4)" ;;
+              *)             value="$(openssl rand -hex 32)" ;;
+            esac
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+
+      - name: El stack E2E fuerza LLM_MODE=fake aunque el entorno diga real
+        env:
+          LLM_MODE: real
+          ANTHROPIC_API_KEY: no-se-usa
+        run: |
+          config="$(docker compose -f docker-compose.e2e.yml config --format json)"
+          echo "$config" | jq -e '.services.backend.environment.LLM_MODE == "fake"'
+          echo "$config" | jq -e '.services.backend.environment.SPRING_PROFILES_ACTIVE == "e2e"'
+          echo "$config" | jq -e '.services.backend.environment.ANTHROPIC_API_KEY == ""'
+
+      - name: Levantar el stack
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait --wait-timeout 300
+
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh
+
+      - name: Logs del stack
+        if: failure()
+        run: docker compose -f docker-compose.e2e.yml logs --no-color
+
+      - name: Parar el stack
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v

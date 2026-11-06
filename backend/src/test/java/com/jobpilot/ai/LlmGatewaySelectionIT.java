@@ -80,4 +80,28 @@ class LlmGatewaySelectionIT {
                 .hasMessageContaining("LLM_MODE=real")
                 .hasMessageContaining("ANTHROPIC_API_KEY");
     }
+
+    /**
+     * JP-OPS-01: una variable de entorno LLM_MODE gana a application-e2e.yml, así que el perfil e2e rechaza el modo
+     * real aunque haya API key. Comprueba también que el perfil ya está activo cuando se ejecuta el
+     * EnvironmentPostProcessor.
+     *
+     * <p>Se usa {@code --llm.mode}: como la variable de entorno, tiene más prioridad que el YAML del perfil. Un
+     * argumento {@code --LLM_MODE} no serviría, porque el nombre en mayúsculas solo se traduce a {@code llm.mode}
+     * cuando viene de una variable de entorno (con él, application-e2e.yml ganaría y la app arrancaría en fake).
+     */
+    @Test
+    void conElPerfilE2eYModoRealLaAplicacionNoArranca() {
+        assertThatThrownBy(() -> start("--spring.profiles.active=e2e",
+                "--llm.mode=real", "--ANTHROPIC_API_KEY=sk-ant-test-only-ficticia"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("e2e");
+    }
+
+    @Test
+    void conElPerfilE2eSinLlmModeSeUsaElFake() throws Exception {
+        try (ConfigurableApplicationContext context = start("--spring.profiles.active=e2e", "--ANTHROPIC_API_KEY=")) {
+            assertThat(context.getBean(LlmGateway.class)).isInstanceOf(FakeLlmGateway.class);
+        }
+    }
 }
