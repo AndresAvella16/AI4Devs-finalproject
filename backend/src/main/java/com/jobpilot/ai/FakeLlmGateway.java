@@ -14,7 +14,6 @@ public class FakeLlmGateway implements LlmGateway {
 
     static final String MODEL_NAME = "fake";
 
-    @SuppressWarnings("unused") // la usan los métodos que añaden JP-BE-04 a JP-BE-07
     private final FakeResponses responses;
 
     FakeLlmGateway(FakeResponses responses) {
@@ -24,5 +23,11 @@ public class FakeLlmGateway implements LlmGateway {
     @Override
     public String modelName() {
         return MODEL_NAME;
+    }
+
+    /** Siempre la oferta del Ejemplo 1 del readme (3 obligatorios y 3 deseables), sea cual sea el texto. */
+    @Override
+    public OfferExtraction extractOffer(String rawText) {
+        return responses.load("offer-extraction", OfferExtraction.class);
     }
 }

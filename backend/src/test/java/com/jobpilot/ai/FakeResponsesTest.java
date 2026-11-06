@@ -3,6 +3,7 @@ package com.jobpilot.ai;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import jakarta.validation.Validation;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,17 @@ class FakeResponsesTest {
     void leeUnJsonDelClasspathAUnRecord() {
         assertThat(responses.load("test-sample", EchoResult.class))
                 .isEqualTo(new EchoResult("respuesta fija de prueba", List.of("uno", "dos")));
+    }
+
+    @Test
+    void laExtraccionFakeDeOfertaCumpleLasMismasReglasQueUnaReal() {
+        OfferExtraction extraction = new FakeLlmGateway(responses).extractOffer("cualquier texto");
+
+        assertThat(Validation.buildDefaultValidatorFactory().getValidator().validate(extraction)).isEmpty();
+        assertThat(new OfferExtractionValidator().validate(extraction)).isEmpty();
+        // La oferta del Ejemplo 1 del readme: 3 obligatorios y 3 deseables (la usan los IT y los E2E).
+        assertThat(extraction.title()).isEqualTo("Desarrollador/a Java Junior");
+        assertThat(extraction.requirements()).hasSize(6);
     }
 
     @Test
