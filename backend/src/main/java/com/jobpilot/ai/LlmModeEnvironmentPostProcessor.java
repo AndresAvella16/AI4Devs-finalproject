@@ -16,7 +16,8 @@ import org.springframework.core.env.MapPropertySource;
  *   <li>{@code fake} (por defecto): {@code spring.ai.model.chat=none}, así que no se crea el cliente de Anthropic
  *       y no hace falta API key.</li>
  *   <li>{@code real}: {@code spring.ai.model.chat=anthropic}. Exige {@code ANTHROPIC_API_KEY} y, si
- *       {@code ANTHROPIC_MODEL} está vacío, usa {@value #DEFAULT_MODEL}.</li>
+ *       {@code ANTHROPIC_MODEL} está vacío, usa {@value #DEFAULT_MODEL}. Con el perfil {@code e2e} activo, la
+ *       aplicación no arranca.</li>
  *   <li>Cualquier otro valor (también con espacios o mayúsculas): la aplicación no arranca.</li>
  * </ul>
  */
@@ -30,6 +31,9 @@ public class LlmModeEnvironmentPostProcessor implements EnvironmentPostProcessor
     static final String API_KEY = "spring.ai.anthropic.api-key";
     static final String MODEL = "spring.ai.anthropic.chat.model";
 
+    /** La variable LLM_MODE gana a application-e2e.yml: con este perfil, el modo real se rechaza (JP-OPS-01). */
+    static final String E2E_PROFILE = "e2e";
+
     private static final String PROPERTY_SOURCE = "jobpilotLlmMode";
 
     @Override
@@ -39,6 +43,10 @@ public class LlmModeEnvironmentPostProcessor implements EnvironmentPostProcessor
         switch (mode) {
             case "fake" -> overrides.put(CHAT_PROVIDER, "none");
             case "real" -> {
+                if (environment.matchesProfiles(E2E_PROFILE)) {
+                    throw new IllegalStateException("El perfil e2e no admite LLM_MODE=real: los tests E2E no "
+                            + "llaman a la API de Anthropic. Usa LLM_MODE=fake (lo fija docker-compose.e2e.yml).");
+                }
                 String apiKey = environment.getProperty(API_KEY);
                 if (apiKey == null || apiKey.isBlank()) {
                     throw new IllegalStateException(

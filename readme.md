@@ -193,9 +193,13 @@ VITE_API_BASE_URL=/api/v1
 ```bash
 git clone https://github.com/AndresAvella16/AI4Devs-finalproject.git
 cd AI4Devs-finalproject
-cp .env.example .env        # rellenar los valores
+cp .env.example .env        # rellenar al menos POSTGRES_USER, POSTGRES_PASSWORD y JWT_SECRET
 docker compose up --build
 ```
+
+Levanta tres servicios, cada uno cuando el anterior está *healthy*: `postgres` → `backend` (perfil `dev`, con migraciones y datos de prueba) → `frontend` (nginx). Dentro de Compose el backend se conecta a `postgres:5432`; el `DB_URL` de `.env` solo se usa al arrancar el backend con `mvnw`.
+
+> **`VITE_API_BASE_URL` se fija al construir la imagen del frontend, no al arrancarla.** Si lo cambias en `.env`, reconstruye con `docker compose up --build`. Con nginx tiene que ser la ruta relativa **`/api/v1`**: una URL absoluta (p. ej. `http://localhost:8080/api/v1`) apunta a otro origen, la CSP (`connect-src 'self'`) bloquea la llamada y el login falla con *"No se ha podido conectar con el servidor"*. `scripts/smoke-test.sh` lo detecta revisando el JS generado.
 
 - Frontend: http://localhost:5173
 - API: http://localhost:8080/api/v1
@@ -236,8 +240,15 @@ El frontend llama siempre a la ruta relativa `/api/v1`. En desarrollo, el servid
 ```bash
 cd backend && ./mvnw verify                # unitarios + integración (Testcontainers)
 cd frontend && npm test                    # unitarios de componentes (Vitest)
-docker compose -f docker-compose.e2e.yml up -d && cd e2e && ./mvnw test   # E2E (Playwright)
+
+# E2E: stack aislado (proyecto jobpilot-e2e, perfil e2e, LLM_MODE=fake fijo, BD vacía en cada arranque).
+# Usa los puertos 5173 y 8080: para antes el stack de desarrollo (docker compose stop backend frontend).
+docker compose -f docker-compose.e2e.yml up -d --build --wait
+bash scripts/smoke-test.sh                 # smoke test HTTP; JP-QA-01 añadirá: cd e2e && ./mvnw test (Playwright)
+docker compose -f docker-compose.e2e.yml down
 ```
+
+La CI (`.github/workflows/ci.yml`) ejecuta lo mismo en cada push y PR (ver 2.4).
 
 ---
 
@@ -338,7 +349,7 @@ flowchart LR
 | **Módulo `analysis`** | `LlmGateway` + `MatchScoreCalculator` | El LLM clasifica cada requisito; `MatchScoreCalculator` (Java puro, sin dependencias) calcula la puntuación. |
 | **Módulo `document`** | `LlmGateway`, CommonMark, OpenHTMLtoPDF | Genera la carta y el CV adaptado en Markdown, versiona los cambios y exporta a PDF. |
 | **Módulo `tracker`** | Spring Data JPA | Candidaturas, reglas de transición de estado (`ApplicationStatusPolicy`) e historial de cambios. |
-| **Módulo `ai`** | Spring AI (`ChatModel` + `BeanOutputConverter`) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st` (con las reglas comunes en `_system-base.st`), conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. `LLM_MODE` (`fake` por defecto, o `real`) elige el adaptador; en `real`, sin `ANTHROPIC_API_KEY` la app no arranca. |
+| **Módulo `ai`** | Spring AI (`ChatModel` + `BeanOutputConverter`) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st` (con las reglas comunes en `_system-base.st`), conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. `LLM_MODE` (`fake` por defecto, o `real`) elige el adaptador; en `real`, sin `ANTHROPIC_API_KEY` la app no arranca. Con el perfil `e2e`, `real` no se admite: la app no arranca aunque haya API key. |
 | **Persistencia** | PostgreSQL 16, Spring Data JPA (Hibernate), Flyway | Modelo relacional, migraciones versionadas y datos de prueba. |
 | **Tests** | JUnit 5, Mockito, AssertJ, Testcontainers, MockMvc, Vitest, React Testing Library, MSW, Playwright for Java | Ver sección 2.6. |
 | **CI** | GitHub Actions | Build, tests y lint en cada push y PR. |
@@ -389,8 +400,11 @@ AI4Devs-finalproject/
 │       └── test/                    # setup de Vitest y handlers de MSW
 ├── e2e/                             # tests E2E con Playwright for Java
 ├── docs/                            # diagramas y capturas
-├── .github/workflows/ci.yml
-├── docker-compose.yml
+├── scripts/smoke-test.sh            # smoke test HTTP del stack de Compose (CI, job e2e)
+├── .github/
+│   ├── workflows/ci.yml
+│   └── dependabot.yml
+├── docker-compose.yml               # postgres + backend (Dockerfile en backend/) + frontend (Dockerfile y nginx.conf en frontend/)
 ├── docker-compose.e2e.yml
 ├── .env.example
 ├── CLAUDE.md                        # contexto y reglas para el asistente de IA
@@ -420,17 +434,22 @@ flowchart TB
 flowchart LR
     P["push / PR"] --> B1["backend:<br/>./mvnw verify<br/>unit + IT (Testcontainers)"]
     P --> F1["frontend:<br/>npm ci · lint · test · build"]
-    B1 --> E["e2e:<br/>docker compose (LLM_MODE=fake)<br/>Playwright"]
+    B1 --> E["e2e:<br/>docker-compose.e2e.yml (LLM_MODE=fake)<br/>smoke test · Playwright (JP-QA-01)"]
     F1 --> E
     E --> D{"¿rama main?"}
     D -- sí --> DEP["Deploy (opcional)<br/>Render: deploy hook"]
 ```
 
+- `backend` y `frontend` se ejecutan en paralelo; `e2e` solo si los dos pasan. El deploy aún no existe (Entrega 3).
+- El job `e2e` genera en cada ejecución credenciales de un solo uso (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET`), comprueba que `docker-compose.e2e.yml` fija `LLM_MODE=fake` aunque el entorno diga `real`, levanta el stack con `--wait` y ejecuta `scripts/smoke-test.sh`. JP-QA-01 añadirá la suite de Playwright.
+- La CI no usa secretos del repositorio ni llama a la API de Anthropic.
+- Imágenes: `backend/Dockerfile` (Maven → `eclipse-temurin:21-jre`, usuario sin privilegios, *healthcheck* con `curl` contra `/actuator/health`; si la imagen base dejara de traer `curl`, se instala al construir) y `frontend/Dockerfile` (Node 22 → `nginx:1.28-alpine`; `nginx.conf` sirve la SPA, reenvía `/api/` al backend y añade las cabeceras de seguridad de 2.5).
+
 **Proceso de despliegue (opcional, previsto para la Entrega 3)**
 
 1. Cada push o PR ejecuta el pipeline de CI. Si un test falla, no se despliega.
 2. En `main`, el backend se construye como imagen Docker (build multi-stage: Maven → JRE 21) y se despliega en **Render** como *Web Service*, conectado a un **PostgreSQL gestionado** de Render.
-3. El frontend se despliega como **Static Site** en Render, con `VITE_API_BASE_URL` apuntando al backend.
+3. El frontend se despliega con su imagen de nginx (`frontend/Dockerfile`), igual que en local: llama a la ruta relativa `/api/v1` y nginx la reenvía al backend, así que no hay CORS ni hace falta cambiar `VITE_API_BASE_URL`. *A revisar al desplegar* (Entrega 3): el `proxy_pass` de `nginx.conf` apunta a `backend:8080`, el nombre del servicio en Compose, y en Render habrá que apuntarlo a la URL interna del backend.
 4. Las migraciones de Flyway se aplican solas al arrancar el backend.
 5. Los secretos (`JWT_SECRET`, `ANTHROPIC_API_KEY`, credenciales de la BD) se configuran como variables de entorno en Render y nunca se versionan.
 6. El endpoint `/actuator/health` se usa como *health check* del servicio.
@@ -448,10 +467,11 @@ flowchart LR
 | **Sin SSRF** | El backend nunca descarga la URL que introduce el usuario; solo la guarda como texto. |
 | **Límite de peticiones** | Única fuente de verdad de los límites de uso (IA y login). Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. **Login:** máximo 10 intentos por minuto por IP + email en `POST /auth/login`, también con Bucket4j; si se supera, `429` con `Retry-After`, para frenar los ataques de fuerza bruta. Se implementa en JP-BE-05. |
 | **CORS** | Solo se permite el origen del frontend (`CORS_ALLOWED_ORIGINS`). |
+| **Cabeceras de seguridad (nginx)** | `frontend/nginx.conf` envía `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` y `Permissions-Policy`. La CSP es `default-src 'self'` con **`script-src 'self'` estricto** (sin scripts en línea ni `eval`): es la mitigación principal frente a un XSS que intentara leer el JWT de `localStorage`. **`style-src` permite `'unsafe-inline'`** porque dnd-kit (tablero, JP-FE-06) mueve las tarjetas con estilos en línea (`style="transform: …"`); los estilos en línea no ejecutan código, y el riesgo que queda (inyección de CSS) es mucho menor. Además: `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` y `frame-ancestors 'none'`. |
 | **Gestión de secretos** | Variables de entorno; `.env` está en `.gitignore` y `.env.example` va con los valores vacíos. |
 | **Errores seguros** | Manejador global (`@RestControllerAdvice`) que devuelve `ProblemDetail` sin trazas internas. |
 | **Datos personales** | El CV contiene datos personales: solo se guarda lo necesario (texto extraído y perfil), se borra en cascada al eliminar la cuenta y nunca se envía al LLM nada que no haga falta para la tarea. |
-| **Dependencias** | Dependabot activado para Maven y npm. |
+| **Dependencias** | Dependabot (`.github/dependabot.yml`) para Maven, npm, GitHub Actions y las imágenes Docker: revisión semanal, un PR agrupado por ecosistema y como mucho 3 PRs abiertos por ecosistema. |
 
 ### **2.6. Tests**
 
@@ -485,12 +505,13 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 **Deuda técnica conocida**
 
 - **`save()` de Spring Data hace `merge` en las entidades nuevas.** Los UUID se asignan en el constructor, así que Spring Data no distingue una entidad nueva de una existente y ejecuta un `SELECT` antes de cada `INSERT`. Funciona, pero cuesta una consulta de más. Se resolverá con una clase base que implemente `Persistable` (JP-DB-01).
-- **JWT en `localStorage` (JP-FE-01).** La sesión (token, `expiresAt` y datos del usuario) se guarda en `localStorage` para que aguante las recargas y sirva en todas las pestañas, pero un XSS podría leer el token. Mitigaciones actuales: el token caduca a los 60 min (el frontend lo descarta al llegar a `expiresAt` y ante cualquier `401`), React escapa el contenido que pinta y no se usa `dangerouslySetInnerHTML`. Pendiente: cabecera CSP en nginx (JP-OPS-01) y sanear el Markdown generado por la IA al mostrarlo (JP-FE-05).
+- **JWT en `localStorage` (JP-FE-01).** La sesión (token, `expiresAt` y datos del usuario) se guarda en `localStorage` para que aguante las recargas y sirva en todas las pestañas, pero un XSS podría leer el token. Mitigaciones actuales: el token caduca a los 60 min (el frontend lo descarta al llegar a `expiresAt` y ante cualquier `401`), React escapa el contenido que pinta, no se usa `dangerouslySetInnerHTML` y nginx envía una CSP con `script-src 'self'` estricto (JP-OPS-01, ver 2.5). Pendiente: sanear el Markdown generado por la IA al mostrarlo (JP-FE-05).
 - **La sesión no se sincroniza entre pestañas (JP-FE-01).** El frontend no escucha el evento `storage`: si se cierra la sesión en una pestaña, las demás siguen mostrando la sesión hasta que su siguiente llamada a la API recibe un `401` (o hasta que llega `expiresAt`), y entonces vuelven a `/login`.
 - **Aviso moderado de `npm audit` en `minimatch` (JP-FE-01).** Llega como dependencia de typescript-eslint, que solo se usa al pasar el lint: no forma parte del bundle que se sirve al navegador. `npm audit fix --force` lo resolvería rebajando typescript-eslint a una versión antigua, así que se deja hasta que typescript-eslint actualice la dependencia.
 - **El login aún no limita los intentos.** `POST /auth/login` no tiene límite de peticiones, así que se puede probar contraseñas por fuerza bruta (el coste 12 de BCrypt solo lo frena). Se resolverá en JP-BE-05 con Bucket4j: 10 intentos por minuto por IP + email → `429` (ver 2.5) (JP-BE-02).
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
-- **La variable de entorno `LLM_MODE` tiene prioridad sobre `application-e2e.yml`.** Spring Boot mapea `LLM_MODE` a `llm.mode`, y las variables de entorno ganan a los YAML de perfil: con `LLM_MODE=real` en el entorno, los tests E2E llamarían a la API de Anthropic y gastarían crédito. Se resolverá en JP-OPS-01 fijando `LLM_MODE=fake` en `docker-compose.e2e.yml` y, si es sencillo, haciendo que el perfil `e2e` se niegue a arrancar con `llm.mode=real` (JP-BE-03).
+- **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. Si molesta, JP-QA-01 puede mover el stack E2E a otros puertos (el smoke test ya los lee de `FRONTEND_URL` y `BACKEND_URL`).
+- **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; para desplegar en Render habrá que parametrizarlo (ver 2.4).
 
 ---
 
@@ -1752,7 +1773,7 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 
 **Convención prevista**
 
-- Una rama por ticket: `feat/JP-BE-06-match-analysis`, `feat/JP-FE-06-kanban`, `chore/JP-OPS-01-ci`…
+- Una rama por ticket: `feat/JP-BE-06-match-analysis`, `feat/JP-FE-06-kanban`, `feat/JP-OPS-01-compose-ci`…
 - Título con [Conventional Commits](https://www.conventionalcommits.org/): `feat(analysis): calcular puntuación de encaje determinista`.
 - Plantilla de descripción: contexto y ticket enlazado, cambios principales, cómo probarlo, capturas (si es frontend), checklist (tests, documentación, migraciones).
 - La CI tiene que estar en verde antes de fusionar. Antes de cada PR se hace una revisión asistida por IA (ver `prompts.md`, sección 7).

@@ -1,0 +1,56 @@
+# Stack para los tests E2E (JP-OPS-01 / JP-QA-01). Proyecto aparte (jobpilot-e2e): no toca los contenedores
+# ni el volumen de docker-compose.yml.
+#   docker compose -f docker-compose.e2e.yml up -d --build --wait
+#   ./scripts/smoke-test.sh                       # hasta JP-QA-01; después, cd e2e && ./mvnw test
+#   docker compose -f docker-compose.e2e.yml down
+#
+# - Perfil e2e y LLM_MODE=fake FIJO: no se lee de .env ni del entorno, así que los E2E nunca llaman a la API
+#   de Anthropic. Además, el backend se niega a arrancar con el perfil e2e y LLM_MODE=real.
+# - BD efímera en memoria (tmpfs): cada "up" empieza con la base de datos vacía. No se publica el puerto 5432.
+# - Usa los mismos puertos que docker-compose.yml (5173 y 8080): para el stack de desarrollo antes de levantarlo.
+# - POSTGRES_USER, POSTGRES_PASSWORD y JWT_SECRET se leen de .env en local; en la CI se generan en cada ejecución.
+
+name: jobpilot-e2e
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: jobpilot
+      POSTGRES_USER: ${POSTGRES_USER:?Define POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: e2e
+      LLM_MODE: fake
+      ANTHROPIC_API_KEY: ""
+      DB_URL: jdbc:postgresql://postgres:5432/jobpilot
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET (mínimo 32 caracteres)}
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api/v1
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
