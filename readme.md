@@ -156,7 +156,7 @@ flowchart LR
 #### Requisitos previos
 
 - **Java 21** (JDK) — el proyecto incluye Maven Wrapper (`./mvnw`), no hace falta instalar Maven.
-- **Node.js 20+** y npm.
+- **Node.js 20.19+** y npm (lo exige Vite 8).
 - **Docker** y **Docker Compose** (para PostgreSQL y para los tests de integración con Testcontainers).
 - Una **API key de Anthropic** (opcional: sin ella, la app puede arrancar en modo `fake` con respuestas simuladas del LLM).
 
@@ -183,7 +183,9 @@ ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=
 
 # Frontend
-VITE_API_BASE_URL=http://localhost:8080/api/v1
+# Ruta relativa: en desarrollo la reenvía el proxy de Vite (:5173 → :8080) y en producción, nginx.
+# Se aplica al construir la imagen del frontend; npm run dev no lee este .env y usa /api/v1 por defecto.
+VITE_API_BASE_URL=/api/v1
 ```
 
 #### Opción A — Todo con Docker Compose
@@ -214,6 +216,8 @@ cd frontend
 npm ci
 npm run dev
 ```
+
+El frontend llama siempre a la ruta relativa `/api/v1`. En desarrollo, el servidor de Vite (http://localhost:5173) reenvía `/api` al backend en `http://localhost:8080` (`server.proxy` en `frontend/vite.config.ts`), así que el navegador no hace peticiones de otro origen y no interviene CORS. En producción, nginx hace lo mismo.
 
 #### Migraciones y datos de prueba (seed)
 
@@ -312,7 +316,8 @@ flowchart LR
 | Integración IA | **Spring AI 2.0.2** (`spring-ai-starter-model-anthropic`) con **Claude** — por defecto `claude-sonnet-5-5`, `max-tokens` 4096, configurable con `ANTHROPIC_MODEL` | Abstracción oficial de Spring para LLMs; Spring AI 2.0 requiere Spring Boot 4 (la 2.0.2 está compilada contra Boot 4.1.2). Sonnet es más barato y rápido que Opus y suficiente para extracción y encaje. |
 | Base de datos | **PostgreSQL 16** + **Flyway** | Relacional, ACID, JSONB para los campos semiestructurados y migraciones versionadas. |
 | Frontend | **React 19** + **TypeScript** + **Vite** | SPA moderna y tipada; React es lo más demandado junto a Java en las ofertas. |
-| UI / estado | Tailwind CSS · TanStack Query · React Hook Form + Zod · dnd-kit | Productividad, caché del servidor, formularios validados y kanban accesible. |
+| UI / estado | Tailwind CSS 4 · TanStack Query 5 · React Router 7 · React Hook Form 7 + Zod 4 · dnd-kit | Productividad, caché del servidor, rutas protegidas, formularios validados y kanban accesible. |
+| Herramientas frontend | Vite 8 · TypeScript 6.0 (`strict`) · ESLint 9 (typescript-eslint, react-hooks, jsx-a11y) · Vitest 5 + React Testing Library + MSW 2 | TypeScript 6.0 y ESLint 9 porque typescript-eslint aún no admite TypeScript 7 y jsx-a11y aún no admite ESLint 10. |
 | Documentos | Apache PDFBox (leer CV) · CommonMark + OpenHTMLtoPDF (generar PDF) | Librerías Java maduras y sin servicios externos. |
 | Tests | JUnit 5 · Mockito · AssertJ · Testcontainers · MockMvc · Vitest · React Testing Library · MSW · Playwright for Java | Cubren unitarios, integración y E2E con el mismo lenguaje en el backend y el E2E. |
 | Infraestructura | Docker · Docker Compose · GitHub Actions · Render (opcional) | Puesta en marcha en local con un comando, CI en cada push y despliegue sencillo. |
@@ -480,6 +485,9 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 **Deuda técnica conocida**
 
 - **`save()` de Spring Data hace `merge` en las entidades nuevas.** Los UUID se asignan en el constructor, así que Spring Data no distingue una entidad nueva de una existente y ejecuta un `SELECT` antes de cada `INSERT`. Funciona, pero cuesta una consulta de más. Se resolverá con una clase base que implemente `Persistable` (JP-DB-01).
+- **JWT en `localStorage` (JP-FE-01).** La sesión (token, `expiresAt` y datos del usuario) se guarda en `localStorage` para que aguante las recargas y sirva en todas las pestañas, pero un XSS podría leer el token. Mitigaciones actuales: el token caduca a los 60 min (el frontend lo descarta al llegar a `expiresAt` y ante cualquier `401`), React escapa el contenido que pinta y no se usa `dangerouslySetInnerHTML`. Pendiente: cabecera CSP en nginx (JP-OPS-01) y sanear el Markdown generado por la IA al mostrarlo (JP-FE-05).
+- **La sesión no se sincroniza entre pestañas (JP-FE-01).** El frontend no escucha el evento `storage`: si se cierra la sesión en una pestaña, las demás siguen mostrando la sesión hasta que su siguiente llamada a la API recibe un `401` (o hasta que llega `expiresAt`), y entonces vuelven a `/login`.
+- **Aviso moderado de `npm audit` en `minimatch` (JP-FE-01).** Llega como dependencia de typescript-eslint, que solo se usa al pasar el lint: no forma parte del bundle que se sirve al navegador. `npm audit fix --force` lo resolvería rebajando typescript-eslint a una versión antigua, así que se deja hasta que typescript-eslint actualice la dependencia.
 - **El login aún no limita los intentos.** `POST /auth/login` no tiene límite de peticiones, así que se puede probar contraseñas por fuerza bruta (el coste 12 de BCrypt solo lo frena). Se resolverá en JP-BE-05 con Bucket4j: 10 intentos por minuto por IP + email → `429` (ver 2.5) (JP-BE-02).
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
 - **La variable de entorno `LLM_MODE` tiene prioridad sobre `application-e2e.yml`.** Spring Boot mapea `LLM_MODE` a `llm.mode`, y las variables de entorno ganan a los YAML de perfil: con `LLM_MODE=real` en el entorno, los tests E2E llamarían a la API de Anthropic y gastarían crédito. Se resolverá en JP-OPS-01 fijando `LLM_MODE=fake` en `docker-compose.e2e.yml` y, si es sencillo, haciendo que el perfil `e2e` se niegue a arrancar con `llm.mode=real` (JP-BE-03).
