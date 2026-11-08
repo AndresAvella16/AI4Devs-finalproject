@@ -12,6 +12,7 @@ public final class ProblemTypes {
     public static final URI UNAUTHORIZED = of("unauthorized");
     public static final URI INVALID_CREDENTIALS = of("invalid-credentials");
     public static final URI NOT_FOUND = of("not-found");
+    public static final URI RATE_LIMIT_EXCEEDED = of("rate-limit-exceeded");
     public static final URI LLM_TIMEOUT = of("llm-timeout");
     public static final URI LLM_OVERLOADED = of("llm-overloaded");
     public static final URI LLM_INVALID_RESPONSE = of("llm-invalid-response");

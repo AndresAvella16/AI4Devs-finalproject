@@ -465,7 +465,7 @@ flowchart LR
 | **Subida de ficheros** | Solo se aceptan PDF de hasta 5 MB; se comprueba el tipo MIME y la firma `%PDF`. El fichero no se guarda en disco: se extrae su texto y se descarta. |
 | **Mitigación de *prompt injection*** | El texto del CV y de la oferta se envía delimitado y marcado como *datos* en el prompt de sistema. El modelo no tiene herramientas ni acceso a nada. Su respuesta se valida contra un esquema estricto antes de usarla, y la puntuación la calcula Java, no el modelo. |
 | **Sin SSRF** | El backend nunca descarga la URL que introduce el usuario; solo la guarda como texto. |
-| **Límite de peticiones** | Única fuente de verdad de los límites de uso (IA y login). Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. **Login:** máximo 10 intentos por minuto por IP + email en `POST /auth/login`, también con Bucket4j; si se supera, `429` con `Retry-After`, para frenar los ataques de fuerza bruta. Se implementa en JP-BE-05. |
+| **Límite de peticiones** | Única fuente de verdad de los límites de uso (IA y login). Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. **Login:** máximo 10 intentos por minuto por IP + email en `POST /auth/login` (cuentan todos, correctos o no, y se comprueba antes de la contraseña), también con Bucket4j; si se supera, `429` con `Retry-After`, para frenar los ataques de fuerza bruta. Los cubos se recargan de forma progresiva (30/h = una petición cada 2 min), las peticiones que no pasan la validación (400) o que no llegan a la IA (404, 409) no gastan cupo, y el 429 es `rate-limit-exceeded`. La IP del cliente la da Tomcat (`server.forward-headers-strategy: native`): solo acepta `X-Forwarded-For` si la petición llega desde un proxy interno (nginx en la red de Docker), y nginx sustituye esa cabecera en lugar de añadir a la que mande el cliente (JP-BE-05). |
 | **CORS** | Solo se permite el origen del frontend (`CORS_ALLOWED_ORIGINS`). |
 | **Cabeceras de seguridad (nginx)** | `frontend/nginx.conf` envía `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` y `Permissions-Policy`. La CSP es `default-src 'self'` con **`script-src 'self'` estricto** (sin scripts en línea ni `eval`): es la mitigación principal frente a un XSS que intentara leer el JWT de `localStorage`. **`style-src` permite `'unsafe-inline'`** porque dnd-kit (tablero, JP-FE-06) mueve las tarjetas con estilos en línea (`style="transform: …"`); los estilos en línea no ejecutan código, y el riesgo que queda (inyección de CSS) es mucho menor. Además: `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` y `frame-ancestors 'none'`. |
 | **Gestión de secretos** | Variables de entorno; `.env` está en `.gitignore` y `.env.example` va con los valores vacíos. |
@@ -508,7 +508,8 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 - **JWT en `localStorage` (JP-FE-01).** La sesión (token, `expiresAt` y datos del usuario) se guarda en `localStorage` para que aguante las recargas y sirva en todas las pestañas, pero un XSS podría leer el token. Mitigaciones actuales: el token caduca a los 60 min (el frontend lo descarta al llegar a `expiresAt` y ante cualquier `401`), React escapa el contenido que pinta, no se usa `dangerouslySetInnerHTML` y nginx envía una CSP con `script-src 'self'` estricto (JP-OPS-01, ver 2.5). Pendiente: sanear el Markdown generado por la IA al mostrarlo (JP-FE-05).
 - **La sesión no se sincroniza entre pestañas (JP-FE-01).** El frontend no escucha el evento `storage`: si se cierra la sesión en una pestaña, las demás siguen mostrando la sesión hasta que su siguiente llamada a la API recibe un `401` (o hasta que llega `expiresAt`), y entonces vuelven a `/login`.
 - **Aviso moderado de `npm audit` en `minimatch` (JP-FE-01).** Llega como dependencia de typescript-eslint, que solo se usa al pasar el lint: no forma parte del bundle que se sirve al navegador. `npm audit fix --force` lo resolvería rebajando typescript-eslint a una versión antigua, así que se deja hasta que typescript-eslint actualice la dependencia.
-- **El login aún no limita los intentos.** `POST /auth/login` no tiene límite de peticiones, así que se puede probar contraseñas por fuerza bruta (el coste 12 de BCrypt solo lo frena). Se resolverá en JP-BE-05 con Bucket4j: 10 intentos por minuto por IP + email → `429` (ver 2.5) (JP-BE-02).
+- **Límites de peticiones en memoria (JP-BE-05).** Los cubos de Bucket4j viven en la memoria del backend: valen para una sola instancia (el despliegue previsto) y se reinician al reiniciarlo. Con varias instancias habría que pasarlos a un almacén compartido (Bucket4j tiene integración con Redis o PostgreSQL). Para acotar la memoria, al llegar a `jobpilot.rate-limit.max-keys` claves se olvidan las que tienen el cupo lleno.
+- **Proxies de confianza para `X-Forwarded-For` (JP-BE-05).** Tomcat da por internas las IPs privadas (10/8, 172.16/12, 192.168/16, 127/8…). En local, el puerto 8080 del backend también está publicado y las peticiones del host llegan desde la puerta de enlace de Docker (172.x), así que quien llame directamente a `:8080` puede falsear su IP. Por nginx (`:5173`) no, porque nginx sustituye la cabecera. Al desplegar en Render hay que ajustar `server.tomcat.remoteip.internal-proxies` al proxy de la plataforma y no publicar el backend.
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
 - **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. Si molesta, JP-QA-01 puede mover el stack E2E a otros puertos (el smoke test ya los lee de `FRONTEND_URL` y `BACKEND_URL`).
 - **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; para desplegar en Render habrá que parametrizarlo (ver 2.4).
@@ -584,7 +585,7 @@ erDiagram
         varchar title "max 160"
         varchar company "max 120"
         varchar location "max 120"
-        varchar work_mode "REMOTO | HIBRIDO | PRESENCIAL | DESCONOCIDO"
+        varchar work_mode "NOT NULL DEFAULT DESCONOCIDO, REMOTO | HIBRIDO | PRESENCIAL | DESCONOCIDO"
         integer salary_min "CHECK >= 0"
         integer salary_max "CHECK >= 0 y >= salary_min"
         varchar currency "ISO 4217, obligatoria si hay salario"
@@ -723,12 +724,12 @@ Idiomas y formación se guardan en JSONB porque solo se muestran y se envían co
 | title | VARCHAR(160) | | Puesto extraído. |
 | company | VARCHAR(120) | | |
 | location | VARCHAR(120) | | |
-| work_mode | VARCHAR(12) | CHECK IN (REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO) | |
+| work_mode | VARCHAR(12) | NOT NULL DEFAULT 'DESCONOCIDO', CHECK IN (REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO) | `DESCONOCIDO` mientras la extracción está PENDIENTE o FALLIDA, o si la oferta no indica la modalidad. `NOT NULL` desde `V2__work_mode_not_null.sql` (JP-BE-05). |
 | salary_min / salary_max | INTEGER | CHECK ≥ 0; CHECK de tabla salary_max ≥ salary_min | Salario bruto anual, si aparece. Cualquiera de los dos puede ser NULL. |
 | currency | VARCHAR(3) | CHECK (currency ~ '^[A-Z]{3}$'); CHECK de tabla: obligatoria si hay salario | ISO 4217 (EUR, USD…). `VARCHAR` y no `CHAR(3)`: Hibernate mapea `String` a `varchar` y la validación del esquema falla con `bpchar`. |
 | source_url | VARCHAR(2048) | | Solo como referencia; nunca se descarga. |
 | raw_text | TEXT | NOT NULL, CHECK longitud 200–20000 | Texto original pegado. |
-| extraction_status | VARCHAR(12) | NOT NULL, CHECK IN (PENDIENTE, COMPLETADA, FALLIDA) | Si el LLM falla, la oferta queda en FALLIDA y se puede reintentar con `POST /offers/{offerId}/extraction`. |
+| extraction_status | VARCHAR(12) | NOT NULL, CHECK IN (PENDIENTE, COMPLETADA, FALLIDA) | La oferta se guarda en PENDIENTE antes de llamar al LLM (el texto no se pierde nunca) y pasa a COMPLETADA o FALLIDA después. Una oferta PENDIENTE (p. ej. por un error que no es de IA) o FALLIDA se puede reintentar con `POST /offers/{offerId}/extraction`. |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
 Restricción de tabla para la moneda: `CHECK ((salary_min IS NULL AND salary_max IS NULL) OR currency IS NOT NULL)`.
@@ -880,22 +881,24 @@ Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 | 401 | `invalid-credentials` | Credenciales incorrectas | Login con email o contraseña incorrectos; misma respuesta exista o no el email |
 | 404 | `not-found` | Recurso no encontrado | El recurso no existe o es de otro usuario |
 | 409 | `email-already-registered` | Email ya registrado | Registro con un email que ya existe (sin distinguir mayúsculas) |
+| 409 | `offer-already-extracted` | La oferta ya tiene sus requisitos extraídos | `POST /offers/{offerId}/extraction` sobre una oferta COMPLETADA |
 | 409 | *(uno por caso)* | *(uno por caso)* | Otros conflictos de negocio, p. ej. `invalid-status-transition` · "Transición de estado no permitida" |
+| 429 | `rate-limit-exceeded` | Demasiadas peticiones | Límite de IA por usuario o de intentos de login superado (ver 2.5), con la cabecera `Retry-After` (segundos) |
 | 500 | `internal-error` | Error interno | Error no controlado (la traza solo va al log) |
 | 502 | `llm-invalid-response` | Respuesta de la IA no válida | `LlmInvalidResponse` |
 | 503 | `llm-overloaded` | La IA está saturada | `LlmOverloaded`, con la cabecera `Retry-After` (segundos) |
 | 504 | `llm-timeout` | La IA no ha respondido a tiempo | `LlmTimeout` |
 
-Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de ruta inexistente…) también se devuelven como `ProblemDetail`, con el `type` por defecto (`about:blank`) y el título estándar de HTTP. El slug de `429` lo fija JP-BE-05 (límite de peticiones).
+Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de ruta inexistente…) también se devuelven como `ProblemDetail`, con el `type` por defecto (`about:blank`) y el título estándar de HTTP.
 
 | Método | Ruta | Cuerpo | Respuesta OK | Otros errores | Funcionalidad |
 |---|---|---|---|---|---|
-| POST | `/auth/register` · `/auth/login` (públicos) | `RegisterRequest` · `LoginRequest` | 201 / 200 `AuthResponse` | 400, 401 (login), 409 (email ya registrado), 429 (login: demasiados intentos, ver 2.5; pendiente de JP-BE-05) | Autenticación |
+| POST | `/auth/register` · `/auth/login` (públicos) | `RegisterRequest` · `LoginRequest` | 201 / 200 `AuthResponse` | 400, 401 (login), 409 (email ya registrado), 429 (login: demasiados intentos, ver 2.5) | Autenticación |
 | POST | `/profile/cv` 🤖 | multipart (`file`, PDF ≤ 5 MB) | 200 `CvDraftResponse`. Guarda `cv_raw_text` y `cv_file_name` y devuelve el **borrador** del perfil, **sin guardarlo** | 400, 415 | F1 — Subir CV y obtener el borrador |
 | GET | `/profile` | — | 200 `ProfileResponse` | 404 (aún no hay perfil) | F1 — Consultar el perfil |
 | PUT | `/profile` | `ProfileRequest` | **201** la primera vez (crea el perfil, sirve también para el perfil hecho a mano) · **200** después (lo reemplaza) | 400 | F1 — Guardar el perfil revisado |
-| POST | `/offers` ⭐ | `CreateOfferRequest` | **201** `OfferResponse` siempre que el texto sea válido. Si la IA falla, la oferta se guarda con `extractionStatus: FALLIDA` | 400, 429 | **F2 — Importar oferta** |
-| POST | `/offers/{offerId}/extraction` 🤖 | — | 200 `OfferResponse`. Reintenta la extracción y borra los requisitos y análisis anteriores en una sola transacción | 404, 409 (la oferta ya está COMPLETADA) | F2 — Reintentar la extracción |
+| POST | `/offers` ⭐ | `CreateOfferRequest` | **201** `OfferResponse` + `Location` siempre que el texto sea válido. Si la IA falla, la oferta se guarda con `extractionStatus: FALLIDA` | 400, 429 (la oferta no se guarda) | **F2 — Importar oferta** |
+| POST | `/offers/{offerId}/extraction` 🤖 | — | 200 `OfferResponse`. Reintenta la extracción de una oferta PENDIENTE o FALLIDA y borra los requisitos y análisis anteriores en una sola transacción. Si la IA vuelve a fallar, queda FALLIDA | 404, 409 `offer-already-extracted` (la oferta ya está COMPLETADA) | F2 — Reintentar la extracción |
 | GET | `/offers` | — | 200 `OfferSummary[]` (incluye `latestScore`, `hasBlockingGap` y `applicationStatus`) | — | F2 — Dashboard |
 | GET | `/offers/{offerId}` | — | 200 `OfferResponse` | 404 | F2 — Detalle |
 | POST | `/offers/{offerId}/analysis` ⭐ 🤖 | — | 201 `AnalysisResponse` | 404, 409 | **F3 — Calcular el encaje** |
@@ -1041,12 +1044,14 @@ components:
           type: string
           minLength: 200
           maxLength: 20000
-          description: Texto completo de la oferta, copiado del portal
+          description: Texto completo de la oferta, copiado del portal. La longitud se cuenta en caracteres Unicode, como char_length en PostgreSQL
         sourceUrl:
           type: string
+          nullable: true
           format: uri
           maxLength: 2048
-          description: URL de referencia (no se descarga)
+          pattern: '^$|(?i)https?://[^\s/?#]+\S*'
+          description: URL de referencia (no se descarga). Solo http o https; vacía equivale a no enviarla
 
     Requirement:
       type: object
@@ -1066,14 +1071,19 @@ components:
           description: null si la extracción está PENDIENTE o FALLIDA
         company: { type: string, nullable: true }
         location: { type: string, nullable: true }
-        workMode: { type: string, enum: [REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO] }
+        workMode:
+          type: string
+          enum: [REMOTO, HIBRIDO, PRESENCIAL, DESCONOCIDO]
+          description: Siempre tiene valor; DESCONOCIDO si la extracción está PENDIENTE o FALLIDA o la oferta no la indica
         salary:
           type: object
           nullable: true
+          description: null si la oferta no indica salario. Como en la BD, puede faltar un extremo pero no los dos, y la moneda es obligatoria
+          required: [currency]
           properties:
-            min: { type: integer }
-            max: { type: integer }
-            currency: { type: string, example: EUR }
+            min: { type: integer, minimum: 0, nullable: true }
+            max: { type: integer, minimum: 0, nullable: true }
+            currency: { type: string, pattern: '^[A-Z]{3}$', example: EUR }
         sourceUrl: { type: string, nullable: true }
         extractionStatus: { type: string, enum: [PENDIENTE, COMPLETADA, FALLIDA] }
         requirements:
@@ -1338,7 +1348,7 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
     TooManyRequests:
-      description: Límite de peticiones de IA superado
+      description: Límite de peticiones superado (rate-limit-exceeded; IA por usuario o intentos de login)
       headers:
         Retry-After:
           schema: { type: integer }

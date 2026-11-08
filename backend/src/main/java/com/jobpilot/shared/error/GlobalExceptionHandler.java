@@ -47,6 +47,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, ProblemTypes.of(ex.getTypeSlug()), ex.getTitle(), ex.getMessage(), request);
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleRateLimitExceeded(RateLimitExceededException ex, HttpServletRequest request) {
+        log.info("Límite de peticiones superado en {} {}", request.getMethod(), request.getRequestURI());
+        ProblemDetail body = problem(HttpStatus.TOO_MANY_REQUESTS, ProblemTypes.RATE_LIMIT_EXCEEDED,
+                "Demasiadas peticiones", ex.getMessage(), request);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.getRetryAfterSeconds()))
+                .body(body);
+    }
+
     // ---- Autenticación (401, siempre con WWW-Authenticate: Bearer) ----
 
     @ExceptionHandler(InvalidCredentialsException.class)

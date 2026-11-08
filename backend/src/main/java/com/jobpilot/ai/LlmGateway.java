@@ -15,4 +15,10 @@ public interface LlmGateway {
 
     /** Modelo que genera las respuestas; se guarda en {@code llm_model} para la trazabilidad. */
     String modelName();
+
+    /**
+     * Extrae los datos clave y los requisitos de una oferta (F2, JP-BE-05). El texto va al modelo como datos no
+     * confiables; la respuesta cumple {@link OfferExtraction} y {@link OfferExtractionValidator}.
+     */
+    OfferExtraction extractOffer(String rawText);
 }

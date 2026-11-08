@@ -13,7 +13,10 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "llm.mode", havingValue = "real")
 public class SpringAiLlmGateway implements LlmGateway {
 
-    @SuppressWarnings("unused") // la usan los métodos que añaden JP-BE-04 a JP-BE-07
+    static final String OFFER_EXTRACTION_PROMPT = "offer-extraction";
+
+    private static final OfferExtractionValidator OFFER_EXTRACTION_VALIDATOR = new OfferExtractionValidator();
+
     private final StructuredLlmCall call;
 
     private final String modelName;
@@ -26,5 +29,13 @@ public class SpringAiLlmGateway implements LlmGateway {
     @Override
     public String modelName() {
         return modelName;
+    }
+
+    @Override
+    public OfferExtraction extractOffer(String rawText) {
+        return call.execute(StructuredRequest.builder(OFFER_EXTRACTION_PROMPT, OfferExtraction.class)
+                .data("oferta", rawText)
+                .validator(OFFER_EXTRACTION_VALIDATOR)
+                .build());
     }
 }

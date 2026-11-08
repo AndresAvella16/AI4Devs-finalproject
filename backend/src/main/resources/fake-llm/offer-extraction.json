@@ -1,0 +1,15 @@
+{
+  "title": "Desarrollador/a Java Junior",
+  "company": null,
+  "location": "Valencia",
+  "workMode": "HIBRIDO",
+  "salary": { "min": 24000, "max": 28000, "currency": "EUR" },
+  "requirements": [
+    { "description": "Al menos 1 año de experiencia con Java y Spring Boot", "type": "OBLIGATORIO", "category": "EXPERIENCIA" },
+    { "description": "Conocimientos de SQL y PostgreSQL", "type": "OBLIGATORIO", "category": "TECNICO" },
+    { "description": "Uso de Git", "type": "OBLIGATORIO", "category": "TECNICO" },
+    { "description": "Experiencia con React", "type": "DESEABLE", "category": "TECNICO" },
+    { "description": "Docker", "type": "DESEABLE", "category": "TECNICO" },
+    { "description": "Inglés B2", "type": "DESEABLE", "category": "IDIOMA" }
+  ]
+}

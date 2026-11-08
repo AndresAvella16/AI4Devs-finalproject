@@ -157,6 +157,18 @@ class ConstraintsIT {
                     "INSERT INTO job_offers (id, user_id, raw_text, extraction_status) VALUES (?, ?, ?, 'ERROR')",
                     UUID.randomUUID(), rows.user(), TestRows.VALID_RAW_TEXT));
         }
+
+        @Test
+        void laModalidadEsObligatoriaYPorDefectoEsDesconocido() {
+            // V2 (JP-BE-05): la API siempre devuelve workMode.
+            UUID id = UUID.randomUUID();
+            jdbc.update("INSERT INTO job_offers (id, user_id, raw_text, extraction_status) VALUES (?, ?, ?, 'PENDIENTE')",
+                    id, rows.user(), TestRows.VALID_RAW_TEXT);
+            org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+                    "SELECT work_mode FROM job_offers WHERE id = ?", String.class, id)).isEqualTo("DESCONOCIDO");
+
+            assertViolates("work_mode", () -> insertOffer(", work_mode", ", NULL"));
+        }
     }
 
     @Nested

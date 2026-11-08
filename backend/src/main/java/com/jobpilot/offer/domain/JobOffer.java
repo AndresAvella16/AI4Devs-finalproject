@@ -66,6 +66,40 @@ public class JobOffer {
         this.createdAt = createdAt;
     }
 
+    /** Oferta recién importada, antes de llamar al LLM: solo el texto, la URL de referencia y la fecha. */
+    public static JobOffer pending(UUID userId, String rawText, String sourceUrl, Instant createdAt) {
+        return new JobOffer(userId, null, null, null, WorkMode.DESCONOCIDO, null, null, null, sourceUrl, rawText,
+                ExtractionStatus.PENDIENTE, createdAt);
+    }
+
+    /** Guarda los datos que ha extraído el LLM. Los requisitos van en su propia tabla. */
+    public void completeExtraction(String title, String company, String location, WorkMode workMode,
+            Integer salaryMin, Integer salaryMax, String currency) {
+        if (isExtractionCompleted()) {
+            throw new IllegalStateException("La extracción de la oferta " + id + " ya está completada");
+        }
+        this.title = title;
+        this.company = company;
+        this.location = location;
+        this.workMode = workMode;
+        this.salaryMin = salaryMin;
+        this.salaryMax = salaryMax;
+        this.currency = currency;
+        this.extractionStatus = ExtractionStatus.COMPLETADA;
+    }
+
+    /** El LLM no ha podido extraer los datos; el usuario puede reintentarlo. No afecta a una oferta ya completada. */
+    public void failExtraction() {
+        if (!isExtractionCompleted()) {
+            this.extractionStatus = ExtractionStatus.FALLIDA;
+        }
+    }
+
+    /** Solo una oferta PENDIENTE o FALLIDA admite (re)intentar la extracción. */
+    public boolean isExtractionCompleted() {
+        return extractionStatus == ExtractionStatus.COMPLETADA;
+    }
+
     public UUID getId() {
         return id;
     }
