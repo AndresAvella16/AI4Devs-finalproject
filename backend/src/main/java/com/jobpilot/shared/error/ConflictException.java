@@ -17,6 +17,15 @@ public class ConflictException extends RuntimeException {
         this.title = Objects.requireNonNull(title, "title");
     }
 
+    /**
+     * La {@code version} enviada no es la guardada: otra petición ha modificado el recurso desde que el cliente lo
+     * leyó (bloqueo optimista).
+     */
+    public static ConflictException versionConflict() {
+        return new ConflictException("version-conflict", "La candidatura ha cambiado",
+                "La candidatura se ha modificado desde que la cargaste. Recarga el tablero e inténtalo de nuevo.");
+    }
+
     public String getTypeSlug() {
         return typeSlug;
     }

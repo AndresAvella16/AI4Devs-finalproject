@@ -100,6 +100,31 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void invalidRequestException_devuelve400DeValidacionConElCampo() throws Exception {
+        mockMvc.perform(get("/test/invalid-field"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value(PROBLEMS + "validation-error"))
+                .andExpect(jsonPath("$.title").value("Datos de entrada no válidos"))
+                .andExpect(jsonPath("$.instance").value("/test/invalid-field"))
+                .andExpect(jsonPath("$.errors", hasSize(1)))
+                .andExpect(jsonPath("$.errors[0].field").value("status"))
+                .andExpect(jsonPath("$.errors[0].message").value("La candidatura ya está en ENVIADA."));
+    }
+
+    @Test
+    void conflictoDeBloqueoOptimista_devuelve409VersionConflict() throws Exception {
+        mockMvc.perform(get("/test/optimistic-lock"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value(PROBLEMS + "version-conflict"))
+                .andExpect(jsonPath("$.title").value("La candidatura ha cambiado"))
+                .andExpect(jsonPath("$.detail").isNotEmpty())
+                .andExpect(jsonPath("$.instance").value("/test/optimistic-lock"))
+                .andExpect(content().string(not(containsString("interno"))));
+    }
+
+    @Test
     void llmTimeoutException_devuelve504() throws Exception {
         mockMvc.perform(get("/test/llm-timeout"))
                 .andExpect(status().isGatewayTimeout())
@@ -205,6 +230,16 @@ class GlobalExceptionHandlerTest {
         @PostMapping("/test/validated")
         String validated(@Valid @RequestBody Payload payload) {
             return "ok";
+        }
+
+        @GetMapping("/test/invalid-field")
+        String invalidField() {
+            throw new InvalidRequestException("status", "La candidatura ya está en ENVIADA.");
+        }
+
+        @GetMapping("/test/optimistic-lock")
+        String optimisticLock() {
+            throw new org.springframework.orm.ObjectOptimisticLockingFailureException("detalle interno", null);
         }
 
         @GetMapping("/test/llm-timeout")

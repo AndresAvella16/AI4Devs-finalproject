@@ -7,6 +7,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -45,6 +46,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     ProblemDetail handleConflict(ConflictException ex, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, ProblemTypes.of(ex.getTypeSlug()), ex.getTitle(), ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    ResponseEntity<Object> handleInvalidRequest(InvalidRequestException ex, NativeWebRequest request) {
+        return validationProblem(List.of(new FieldError(ex.getField(), ex.getMessage())), new HttpHeaders(),
+                request);
+    }
+
+    /**
+     * Otra petición ha modificado la fila entre la lectura y la escritura (bloqueo optimista con {@code @Version}).
+     * El servicio ya compara la {@code version} que envía el cliente; esto cubre la carrera entre dos peticiones.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLocking(OptimisticLockingFailureException ex, HttpServletRequest request) {
+        log.info("Conflicto de versión en {} {}", request.getMethod(), request.getRequestURI());
+        return handleConflict(ConflictException.versionConflict(), request);
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
