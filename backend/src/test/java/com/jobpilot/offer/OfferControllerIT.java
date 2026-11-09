@@ -413,9 +413,11 @@ class OfferControllerIT {
 
     private void analysisAt(UUID offerId, UUID profileId, int score, boolean blocking, String createdAt) {
         jdbc.update("""
-                INSERT INTO match_analyses (id, offer_id, profile_id, score, has_blocking_gap, llm_model, created_at)
-                VALUES (?, ?, ?, ?, ?, 'fake', ?)""",
-                UUID.randomUUID(), offerId, profileId, score, blocking, Timestamp.from(Instant.parse(createdAt)));
+                INSERT INTO match_analyses (id, offer_id, profile_id, score, has_blocking_gap, summary, suggestions,
+                                            llm_model, created_at)
+                VALUES (?, ?, ?, ?, ?, 'Resumen', ?::jsonb, 'fake', ?)""",
+                UUID.randomUUID(), offerId, profileId, score, blocking, TestRows.VALID_SUGGESTIONS,
+                Timestamp.from(Instant.parse(createdAt)));
     }
 
     @Test

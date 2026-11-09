@@ -1,0 +1,16 @@
+{
+  "results": [
+    { "result": "CUMPLE", "evidence": "Prácticas de 12 meses como desarrollador Java (Spring Boot)" },
+    { "result": "CUMPLE", "evidence": "APIs REST sobre PostgreSQL en el puesto actual" },
+    { "result": "CUMPLE", "evidence": "Control de versiones con Git en todos los proyectos" },
+    { "result": "PARCIAL", "evidence": "Proyecto personal con React; sin experiencia profesional" },
+    { "result": "NO_CUMPLE", "evidence": null },
+    { "result": "CUMPLE", "evidence": "Inglés B2" }
+  ],
+  "summary": "Cumples todos los requisitos obligatorios. Tu principal margen de mejora está en Docker.",
+  "suggestions": [
+    "Pon tu experiencia con Spring Boot en la primera línea del resumen.",
+    "Menciona tu proyecto con React con un enlace al repositorio.",
+    "Añade un Dockerfile a uno de tus proyectos públicos y menciónalo."
+  ]
+}
