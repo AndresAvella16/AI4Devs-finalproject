@@ -34,7 +34,7 @@ Stack: **Java 21 + Spring Boot 4** (API REST), **PostgreSQL**, **React + TypeScr
 
 ### **0.4. URL del proyecto:**
 
-> Pendiente. El despliegue es opcional en el máster; si se realiza, se publicará aquí en la Entrega 3 (Render: backend en contenedor Docker + PostgreSQL gestionado + frontend estático). La evidencia de funcionamiento principal será el **acceso al repositorio con credenciales de prueba** y un **vídeo de 2–3 minutos** del flujo principal.
+> Sin despliegue público por ahora (es opcional en el máster; si se hace, se publicará aquí en la Entrega 3). **Evidencia de funcionamiento en la Entrega 2:** acceso al repositorio con credenciales de prueba y la app completa en local con un solo comando (`docker compose up --build`, ver 1.4), más las capturas de la sección 1.3. En la Entrega 3 se añadirá un **vídeo de 2–3 minutos** del flujo principal.
 
 ### 0.5. URL o archivo comprimido del repositorio
 
@@ -119,9 +119,44 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 - **Scraping de portales de empleo** (LinkedIn, InfoJobs…): sus condiciones de uso lo prohíben y el scraping es frágil. La URL de la oferta solo se guarda como referencia y el contenido se pega a mano.
 - **Envío automático de candidaturas**: el usuario sigue enviando su candidatura en el portal correspondiente; JobPilot prepara y registra.
 
+#### Estado de implementación (Entrega 2)
+
+| # | Funcionalidad | Estado | Tickets |
+|---|---|---|---|
+| — | Registro e inicio de sesión (JWT) | ✅ Operativa | JP-BE-02, JP-FE-01 |
+| F2 | Importar oferta | ✅ Operativa de extremo a extremo | JP-BE-05, JP-FE-03 |
+| F3 | Análisis de encaje | ✅ Operativa de extremo a extremo | JP-BE-06, JP-FE-04 |
+| F1 | Perfil a partir del CV | ⏳ Entrega 3 (la Entrega 2 usa el perfil de los datos de prueba) | JP-BE-04, JP-FE-02 |
+| F4 | Carta y CV adaptados | ⏳ Entrega 3 | JP-BE-07, JP-FE-05 |
+| F5 | Tablero de candidaturas | ⏳ Entrega 3 (el dashboard ya muestra el estado de cada candidatura) | JP-BE-08, JP-FE-06 |
+
+**Flujo operativo:** navegador → React (nginx) → API Spring Boot → PostgreSQL, con la IA detrás del puerto `LlmGateway`.
+
+> **Sobre la IA en la Entrega 2.** La app funciona en modo `LLM_MODE=fake` (valor por defecto): `FakeLlmGateway` devuelve respuestas fijas (la extracción de la oferta del Ejemplo 1 de la sección 4 y su evaluación), así que el flujo completo es real (se guarda en la BD, Java calcula la puntuación, se muestra en el navegador) salvo la respuesta del modelo. La integración con Claude (`SpringAiLlmGateway`, `LLM_MODE=real`) está implementada y cubierta por tests con respuestas simuladas (`ScriptedChatModel`): prompts, validación, reintento y traducción de errores a 502/503/504. **La prueba contra la API real de Anthropic queda pendiente para la Entrega 3**, junto con la decisión de usar la API de Anthropic o un modelo local con Ollama (que gracias al puerto `LlmGateway` sería solo un adaptador más).
+
 ### **1.3. Diseño y experiencia de usuario:**
 
-> En la Entrega 1 todavía no hay interfaz implementada. Se documenta el flujo de usuario y las pantallas previstas; las capturas y el vídeo del recorrido completo se añadirán en la Entrega 3.
+> Capturas de la Entrega 2 (modo `fake`, usuario de prueba `demo@jobpilot.dev`). El vídeo del recorrido completo se añadirá en la Entrega 3.
+
+**Inicio tras el login**
+
+![Inicio tras el login](docs/screenshots/01-inicio-tras-login.png)
+
+**Dashboard de ofertas** — puntuación del último análisis con su color (rojo < 50, ámbar 50–74, verde ≥ 75), aviso de requisito bloqueante y estado de la candidatura.
+
+![Dashboard de ofertas](docs/screenshots/02-dashboard-ofertas.png)
+
+**Detalle de una oferta importada** — datos extraídos por la IA y requisitos agrupados en obligatorios y deseables.
+
+![Detalle de oferta](docs/screenshots/03-detalle-oferta.png)
+
+**Análisis de encaje** — puntuación 85 (Ejemplo 2 de la sección 4): resultado de cada requisito con texto e icono (no solo color), evidencia del perfil y sugerencias.
+
+![Análisis de encaje con 85](docs/screenshots/04-analisis-encaje-85.png)
+
+**Análisis con requisitos bloqueantes** — puntuación 42: aviso de requisitos obligatorios no cumplidos y filas señaladas como "Bloqueante".
+
+![Análisis con requisitos bloqueantes](docs/screenshots/05-analisis-bloqueante-42.png)
 
 **Flujo principal de usuario**
 
@@ -141,7 +176,7 @@ flowchart LR
     K --> L[Kanban de candidaturas]
 ```
 
-**Pantallas previstas**
+**Pantallas del producto** (implementadas en la Entrega 2: login/registro, dashboard, nueva oferta y detalle con el panel de análisis; el resto, en la Entrega 3)
 
 | Pantalla | Contenido principal |
 |---|---|
@@ -156,7 +191,7 @@ flowchart LR
 
 ### **1.4. Instrucciones de instalación:**
 
-> Estas instrucciones describen la puesta en marcha prevista; se validarán y actualizarán con el código en las Entregas 2 y 3.
+> Instrucciones verificadas en la Entrega 2 (Windows 10 con Docker Desktop y WSL 2; la CI las ejecuta en Linux en cada push). La forma recomendada de revisar el proyecto es la **opción A**.
 
 #### Requisitos previos
 
@@ -482,6 +517,21 @@ flowchart LR
 
 La estrategia sigue la pirámide de tests y la recomendación del máster para sistemas con LLM: **los componentes que rodean al modelo se prueban de forma determinista con respuestas simuladas**, y las salidas reales del modelo se validan por estructura y reglas, no comparando el texto exacto.
 
+**Estado de la suite al cerrar la Entrega 2**
+
+| Capa | Herramientas | Tests | Notas |
+|---|---|---|---|
+| Backend: unitarios | JUnit 5, AssertJ, Mockito | 214 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores y límites de peticiones. |
+| Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 176 | Migraciones y restricciones de la BD, auth/JWT, ofertas, análisis, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
+| Cobertura | JaCoCo | 100 % de líneas en `analysis.domain` | Regla `check` (≥ 90 %) en `mvnw verify`, como pide la definición de hecho de JP-BE-06. |
+| Frontend | Vitest, React Testing Library, MSW | 130 | Cliente API, sesión, formularios, dashboard, detalle y panel de análisis. |
+| Stack completo | `scripts/smoke-test.sh` contra `docker-compose.e2e.yml` | Smoke test HTTP | Health, nginx (fallback de la SPA, CSP, proxy `/api`), login y comprobación de que el JS no lleva una URL absoluta de la API. |
+| CI | GitHub Actions | 3 jobs | `backend` y `frontend` en paralelo; `e2e` (smoke test) si los dos pasan. |
+
+Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil `dev` o Docker Compose). Detectó problemas que los tests automáticos no veían: un `.env` mal formado, una URL de la API absoluta que la CSP bloqueaba, la IP del cliente falsificable a través de nginx y un error de validación de la URL que no se mostraba.
+
+**Previsto para la Entrega 3:** E2E con Playwright del flujo principal (JP-QA-01), tests del tablero (`ApplicationStatusPolicyTest`, `ApplicationControllerIT`), del perfil (`CvTextExtractorTest`) y la validación con el LLM real (`@Tag("llm-live")`). La lista de abajo es el diseño completo de la suite.
+
 **Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
 
 - `MatchScoreCalculatorTest`: tests parametrizados de la fórmula. Todo cumplido → 100; sin deseables → solo cuentan los obligatorios; mezcla de CUMPLE/PARCIAL/NO_CUMPLE → valor esperado; requisito obligatorio sin cumplir → aviso de bloqueante.
@@ -666,7 +716,7 @@ erDiagram
 
 ### **3.2. Descripción de entidades principales:**
 
-> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC, con `DEFAULT now()`. Los borrados se propagan en cascada desde el usuario. PostgreSQL no indexa las claves foráneas automáticamente, así que cada FK tiene un índice que la cubre, es decir, que empieza por sus columnas o permite buscar por ellas (ver [Índices](#índices)). Las restricciones que no caben en un `UNIQUE` normal (unicidad sin distinguir mayúsculas, coherencia entre tablas) se implementan como índices únicos de expresión o como claves foráneas compuestas, y se indican así en las tablas.
+> Convenciones: todas las claves primarias son `UUID` generados por la aplicación. Los enumerados se guardan como `VARCHAR` con restricción `CHECK` (más fácil de migrar que los `ENUM` nativos de PostgreSQL). Las fechas con hora usan `TIMESTAMPTZ` en UTC, con `DEFAULT now()`. Los borrados se propagan en cascada desde el usuario. Las fechas "de hoy" (`applied_at`, seguimiento vencido) se calculan con un `java.time.Clock` inyectable en la zona `Europe/Madrid`, no en UTC, para que entre las 0:00 y la 1:00 "hoy" no siga siendo ayer; además hace los tests deterministas. PostgreSQL no indexa las claves foráneas automáticamente, así que cada FK tiene un índice que la cubre, es decir, que empieza por sus columnas o permite buscar por ellas (ver [Índices](#índices)). Las restricciones que no caben en un `UNIQUE` normal (unicidad sin distinguir mayúsculas, coherencia entre tablas) se implementan como índices únicos de expresión o como claves foráneas compuestas, y se indican así en las tablas.
 
 #### `users` — Usuario de la aplicación
 
@@ -696,7 +746,7 @@ Relaciones: 1–0..1 con `profiles`; 1–N con `job_offers` y `applications`.
 | cv_raw_text | TEXT | | Texto extraído; se usa como contexto para el LLM. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
 
-Idiomas y formación se guardan en JSONB porque solo se muestran y se envían como contexto al LLM, nunca se consultan por separado. Las habilidades y experiencias, en cambio, tienen tabla propia porque se editan una a una. La base de datos solo garantiza que el JSONB es un array; la forma de cada elemento la valida la aplicación (records Java con Bean Validation, mapeados con `@JdbcTypeCode(SqlTypes.JSON)`). Si algún día hiciera falta filtrar por idioma o nivel en SQL, se normalizarían a tabla propia.
+Idiomas y formación se guardan en JSONB porque solo se muestran y se envían como contexto al LLM, nunca se consultan por separado. Las habilidades y experiencias, en cambio, tienen tabla propia por la unicidad sin distinguir mayúsculas de las habilidades, el `CHECK` del nivel y el orden de las experiencias. La base de datos solo garantiza que el JSONB es un array; la forma de cada elemento la valida la aplicación (records Java con Bean Validation, mapeados con `@JdbcTypeCode(SqlTypes.JSON)`). Si algún día hiciera falta filtrar por idioma o nivel en SQL, se normalizarían a tabla propia.
 
 #### `profile_skills` — Habilidades del perfil
 
@@ -809,7 +859,7 @@ Como `offer_id` es `NOT NULL` y es la misma columna en las dos FKs, es imposible
 | status | VARCHAR(12) | NOT NULL DEFAULT 'GUARDADA', CHECK IN (GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA) | Columna del kanban. |
 | board_position | INTEGER | NOT NULL, CHECK ≥ 0 | Orden dentro de la columna. No es único (reordenar exigiría una restricción diferida); en caso de empate se ordena por `created_at`. |
 | applied_at | DATE | CHECK (status NOT IN ('ENVIADA','ENTREVISTA','OFERTA') OR applied_at IS NOT NULL) | Se rellena al pasar a ENVIADA. |
-| follow_up_date | DATE | | Si es anterior a hoy, la tarjeta se marca como vencida (se calcula en la consulta, no se guarda). |
+| follow_up_date | DATE | | Si es anterior a hoy y la candidatura no está en OFERTA ni DESCARTADA, la tarjeta se marca como vencida (`followUpOverdue`; se calcula en la consulta, no se guarda), como dice la HU-05. |
 | notes | TEXT | | |
 | version | BIGINT | NOT NULL DEFAULT 0 | `@Version` para el bloqueo optimista. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
@@ -1793,17 +1843,40 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 
 ## 7. Pull Requests
 
-> Todavía no hay Pull Requests: la Entrega 1 es solo de documentación. Las PRs se documentarán aquí a partir de la Entrega 2.
+Cada ticket se desarrolla en su propia rama y se fusiona en `main` con una PR **dentro de mi repositorio**. Las PRs no son la entrega: la entrega es rama + Typeform. Convención: una rama por ticket (`feat/JP-XX-NN-descripcion`), título con [Conventional Commits](https://www.conventionalcommits.org/), descripción con el resumen de la fase 5 de `/ticket` (qué se ha hecho, tests, decisiones y cambios en el readme) y **CI en verde antes de fusionar** (desde la PR #7).
 
-**Convención prevista**
+**Pull Request 1** — [#1 `feat(backend): scaffolding Spring Boot, configuración y manejo global de errores`](https://github.com/AndresAvella16/AI4Devs-finalproject/pull/1) (JP-BE-01)
 
-- Una rama por ticket: `feat/JP-BE-06-match-analysis`, `feat/JP-FE-06-kanban`, `feat/JP-OPS-01-compose-ci`…
-- Título con [Conventional Commits](https://www.conventionalcommits.org/): `feat(analysis): calcular puntuación de encaje determinista`.
-- Plantilla de descripción: contexto y ticket enlazado, cambios principales, cómo probarlo, capturas (si es frontend), checklist (tests, documentación, migraciones).
-- La CI tiene que estar en verde antes de fusionar. Antes de cada PR se hace una revisión asistida por IA (ver `prompts.md`, sección 7).
+- Proyecto Maven con Spring Boot 4.1.2 (compatible con Spring AI 2.0), springdoc 3.2.0 y Failsafe para los `*IT` con Testcontainers.
+- `GlobalExceptionHandler` sobre `ResponseEntityExceptionHandler`: todos los errores salen como `ProblemDetail` (RFC 9457) sin trazas; el 500 registra la excepción en el log. Excepciones de IA traducidas a 502/503/504.
+- Perfiles `dev`, `e2e` y `prod` (en `prod`, las variables sensibles son obligatorias y Swagger está desactivado). `docker-compose.yml` mínimo con PostgreSQL.
+- Decisión humana: no adelantar Spring Security y no registrar cuerpos de petición (datos del CV). La prueba real con el perfil `dev` detectó un `.env` mal formado.
 
-**Pull Request 1** — *Pendiente (Entrega 2): scaffolding de backend y frontend, esquema de BD y CI (JP-BE-01, JP-FE-01, JP-DB-01, JP-OPS-01).*
+**Pull Request 2** — [#8 `feat(offer): importar ofertas con extracción de requisitos y límites de peticiones`](https://github.com/AndresAvella16/AI4Devs-finalproject/pull/8) (JP-BE-05)
 
-**Pull Request 2** — *Pendiente (Entrega 2): primer flujo de extremo a extremo, importar oferta → análisis de encaje (JP-BE-03, JP-BE-05, JP-BE-06, JP-FE-03, JP-FE-04).*
+- `POST /offers`, reintento de extracción, dashboard (`GET /offers` con consulta `LATERAL`) y detalle, todo filtrado por usuario.
+- La oferta se guarda en PENDIENTE → el LLM se llama fuera de transacción → pasa a COMPLETADA o FALLIDA: el texto del usuario no se pierde nunca (decisión humana frente a la propuesta inicial de la IA).
+- Límites con Bucket4j: 30 llamadas de IA por hora y usuario, y 10 intentos de login por minuto por IP + email (429 con `Retry-After`).
+- La prueba con el stack de Docker destapó que nginx permitía falsear la IP del cliente; ahora sustituye `X-Forwarded-For` por la IP real. Cierra las incoherencias 13 y 14 de la revisión de coherencia (ver `prompts.md`, sección 4 → Prompt 3) con la migración V2.
 
-**Pull Request 3** — *Pendiente (Entrega 3): tablero kanban y suite E2E (JP-BE-08, JP-FE-06, JP-QA-01).*
+**Pull Request 3** — [#9 `feat(analysis): análisis de encaje con puntuación determinista`](https://github.com/AndresAvella16/AI4Devs-finalproject/pull/9) (JP-BE-06)
+
+- `MatchScoreCalculator` en Java puro (`BigDecimal`, redondeo `HALF_UP`): la IA clasifica cada requisito y Java calcula la puntuación. El Ejemplo 2 da 85.
+- `LlmGateway.evaluateMatch` con validación de la respuesta (todos los requisitos, sin duplicados, de 3 a 5 sugerencias) y reintento. Al LLM solo se envía el perfil estructurado, sin el texto del CV, nombre ni email.
+- JaCoCo con regla de cobertura ≥ 90 % en `analysis.domain` (resultado: 100 %). Migración V3 que cierra las incoherencias 15, 16 y 17 de esa misma revisión.
+
+**Todas las PRs de la Entrega 2**
+
+| PR | Ticket | Título |
+|---|---|---|
+| #1 | JP-BE-01 | feat(backend): scaffolding Spring Boot, configuración y manejo global de errores |
+| #2 | JP-DB-01 | feat(db): esquema inicial con Flyway, datos de prueba y entidades JPA |
+| #3 | JP-BE-02 | feat(auth): registro, login y validación de JWT con Spring Security |
+| #4 | JP-BE-03 | feat(ai): puerto LlmGateway con adaptador Spring AI y modo fake |
+| #5 | — | docs(prompts): registrar el uso de IA en los tickets de backend de la Entrega 2 |
+| #6 | JP-FE-01 | feat(frontend): scaffolding de Vite + React con router, cliente API y autenticación |
+| #7 | JP-OPS-01 | feat(ops): stack completo con Docker Compose y pipeline de CI en GitHub Actions |
+| #8 | JP-BE-05 | feat(offer): importar ofertas con extracción de requisitos y límites de peticiones |
+| #9 | JP-BE-06 | feat(analysis): análisis de encaje con puntuación determinista |
+| #10 | JP-FE-03 | feat(offers): dashboard de ofertas, formulario de nueva oferta y detalle básico |
+| #11 | JP-FE-04 | feat(analysis): panel de análisis de encaje en el detalle de la oferta |
