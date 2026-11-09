@@ -7,7 +7,7 @@ import { Button } from '../../components/Button';
 import { FormField } from '../../components/FormField';
 import { AuthCard } from './AuthCard';
 import { registerSchema, type RegisterForm } from './schemas';
-import { applyServerErrors, toGeneralError, type GeneralError } from './serverErrors';
+import { applyServerErrors, toGeneralError, type GeneralError } from '../../components/serverErrors';
 import { useRegister } from './useAuthMutations';
 
 export function RegisterPage() {

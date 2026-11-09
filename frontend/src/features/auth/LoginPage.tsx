@@ -7,7 +7,7 @@ import { Button } from '../../components/Button';
 import { FormField } from '../../components/FormField';
 import { AuthCard } from './AuthCard';
 import { loginSchema, type LoginForm } from './schemas';
-import { applyServerErrors, toGeneralError, type GeneralError } from './serverErrors';
+import { applyServerErrors, toGeneralError, type GeneralError } from '../../components/serverErrors';
 import { useAuth } from './useAuth';
 import { useLogin } from './useAuthMutations';
 

@@ -1,5 +1,5 @@
 import type { FieldValues, Path, UseFormSetError } from 'react-hook-form';
-import { ApiError } from '../../api/ApiError';
+import { ApiError } from '../api/ApiError';
 
 /**
  * Lleva a los campos del formulario los errores del backend que se pueden asociar a uno:
