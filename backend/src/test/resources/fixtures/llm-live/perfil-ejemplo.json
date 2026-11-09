@@ -1,0 +1,36 @@
+{
+  "headline": "Desarrollador backend Java",
+  "summary": "Desarrollador con 2 años de experiencia en backend con Java y Spring Boot, APIs REST y PostgreSQL. Perfil ficticio para los tests llm-live.",
+  "yearsExperience": 2,
+  "location": "Valencia",
+  "skills": [
+    { "name": "Java", "level": "AVANZADO", "years": 2 },
+    { "name": "Spring Boot", "level": "INTERMEDIO", "years": 2 },
+    { "name": "PostgreSQL", "level": "INTERMEDIO", "years": 2 },
+    { "name": "Git", "level": "AVANZADO", "years": 3 },
+    { "name": "JUnit", "level": "INTERMEDIO", "years": 1 },
+    { "name": "React", "level": "BASICO" }
+  ],
+  "experiences": [
+    {
+      "company": "Ficticia Tech",
+      "role": "Desarrollador Java",
+      "startDate": "2024-09-01",
+      "endDate": null,
+      "description": "APIs REST con Spring Boot sobre PostgreSQL; tests con JUnit y Mockito; control de versiones con Git."
+    },
+    {
+      "company": "Consultora Ejemplo",
+      "role": "Desarrollador en prácticas",
+      "startDate": "2023-09-01",
+      "endDate": "2024-06-30",
+      "description": "Mantenimiento de una aplicación Java y consultas SQL."
+    }
+  ],
+  "education": [
+    { "title": "CFGS Desarrollo de Aplicaciones Web (DAW)", "institution": "IES Ficticio de Valencia", "year": 2024 }
+  ],
+  "languages": [
+    { "language": "Inglés", "level": "B1" }
+  ]
+}

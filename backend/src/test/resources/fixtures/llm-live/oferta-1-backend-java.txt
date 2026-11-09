@@ -1,0 +1,18 @@
+Desarrollador/a Backend Java — Nimbalia Software (empresa ficticia)
+Ubicación: Valencia. Modalidad: híbrido (2 días en oficina a la semana).
+Salario: 32.000 – 38.000 € brutos anuales.
+
+En Nimbalia desarrollamos una plataforma de reservas para clínicas veterinarias y buscamos a alguien que se una al equipo de backend.
+
+Requisitos imprescindibles:
+- Al menos 2 años de experiencia con Java y Spring Boot.
+- Experiencia diseñando APIs REST.
+- Conocimientos de SQL y PostgreSQL.
+- Uso habitual de Git.
+
+Se valorará:
+- Experiencia con Docker.
+- Haber trabajado con tests automatizados (JUnit, Testcontainers).
+- Inglés B2 para leer documentación técnica.
+
+Ofrecemos horario flexible, 23 días de vacaciones y formación pagada.

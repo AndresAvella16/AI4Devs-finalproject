@@ -1,0 +1,16 @@
+Frontend Developer (React) — Lumeo Labs (empresa ficticia)
+100 % remoto desde cualquier lugar de España.
+
+Lumeo Labs crea herramientas de analítica para pequeños comercios. Buscamos una persona para construir la nueva interfaz de nuestro panel de control.
+
+Qué necesitamos:
+- 3 años o más de experiencia con React y TypeScript.
+- Dominio de HTML, CSS y accesibilidad web.
+- Experiencia consumiendo APIs REST.
+
+Será un plus:
+- Conocer TanStack Query o Redux.
+- Experiencia con tests de componentes (Vitest o Jest, React Testing Library).
+- Nociones de diseño en Figma.
+
+Equipo pequeño, sin reuniones innecesarias y con presupuesto anual para material y cursos. El salario se acordará según la experiencia.

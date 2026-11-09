@@ -83,7 +83,9 @@ class ApplicationContextIT {
                         "--POSTGRES_USER=" + POSTGRES.getUsername(),
                         "--POSTGRES_PASSWORD=" + POSTGRES.getPassword(),
                         "--JWT_SECRET=test-only-secreto-jwt-ficticio-de-al-menos-32-bytes",
-                        // Sin key aunque la máquina (o el .env que importa dev) tenga una.
+                        // Modo fake y sin key aunque la máquina (o el .env que importa dev) digan otra cosa. Se usa
+                        // --llm.mode: un argumento --LLM_MODE no se traduce a llm.mode (ver LlmGatewaySelectionIT).
+                        "--llm.mode=fake",
                         "--ANTHROPIC_API_KEY=");
     }
 
