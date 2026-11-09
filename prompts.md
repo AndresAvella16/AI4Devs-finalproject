@@ -17,6 +17,18 @@
 
 ## 0. Flujo de trabajo con IA
 
+### Prompts y workflows clave (resumen)
+
+Los 5 que fueron el núcleo del desarrollo, de la idea al código:
+
+| # | Fase | Prompt o workflow | Dónde |
+|---|---|---|---|
+| 1 | Análisis | Generar la idea a partir de un problema real (estoy buscando trabajo) y acotarla a 5 funcionalidades | Sección 1 → Prompt 1 |
+| 2 | Diseño | Generar la documentación completa de la Entrega 1 siguiendo las plantillas oficiales | Sección 1 → Prompt 3 |
+| 3 | Diseño (revisión) | Cruzar API, modelo de datos y tickets en busca de incoherencias, en un chat nuevo que no había escrito el documento: encontró 24 | Sección 4 → Prompt 3 |
+| 4 | Contexto para implementar | Generar `CLAUDE.md` (reglas de arquitectura) y el comando `/ticket` a partir del readme y de la Lección 2 | Sección 2.3 → Prompt 2 |
+| 5 | Implementación y pruebas | **Workflow `/ticket` (SDD)**: especificación → mi OK → tests primero → código → verificación → prueba real → PR. Aplicado a los 10 tickets de la Entrega 2 | Sección 6 → Prompt 3 |
+
 ### Herramientas y modelos por fase
 
 | Fase del ciclo de vida | Herramienta | Modelo | Uso |
@@ -420,6 +432,8 @@ Esta plantilla se convirtió en el comando de Claude Code `.claude/commands/tick
 5. **Resumen** con las decisiones propias de la IA, los cambios en el readme y una propuesta para este archivo.
 
 Proceso en cada ticket: reviso el plan con un segundo modelo (Claude en claude.ai), respondo a **todas** las dudas, exijo la **prueba real** con el perfil `dev` antes del commit y cierro con una PR hacia `main`.
+
+> **Cómo se tomó el criterio humano.** Revisé cada plan de Claude Code con un segundo modelo (Claude en claude.ai), que no escribía el código y actuaba como revisor: muchas de las correcciones de la columna "Mi criterio humano" surgieron de esa revisión. La decisión final de aceptarlas, cambiarlas o descartarlas fue siempre mía, y algunas salieron directamente de mis propias pruebas en el navegador (la CSP que bloqueaba el login y el error de URL que no se mostraba).
 
 | Ticket | PR | Lo que aportó la IA | Mi criterio humano |
 |---|---|---|---|
