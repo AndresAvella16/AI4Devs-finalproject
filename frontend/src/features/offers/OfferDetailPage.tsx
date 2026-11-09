@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router';
 import { ApiError } from '../../api/ApiError';
 import type { OfferResponse, Requirement, RequirementType } from '../../api/offers';
 import { Alert } from '../../components/Alert';
+import { AnalysisPanel } from '../analysis/AnalysisPanel';
 import { Button } from '../../components/Button';
 import { toGeneralError } from '../../components/serverErrors';
 import { CATEGORY_LABELS, formatDate, formatSalary, UNTITLED_OFFER, WORK_MODE_LABELS } from './labels';
@@ -10,8 +11,8 @@ import { useOffer, useRetryExtraction } from './useOffers';
 const backLink = 'text-sm font-medium text-indigo-700 underline-offset-2 hover:underline';
 
 /**
- * Detalle básico de una oferta (`/ofertas/:offerId`): cabecera, requisitos agrupados y reintento de la extracción.
- * JP-FE-04 le añade el panel de análisis.
+ * Detalle de una oferta (`/ofertas/:offerId`): cabecera, requisitos agrupados y panel de análisis de encaje
+ * (JP-FE-04) si la extracción está COMPLETADA; si no, el reintento de la extracción.
  */
 export function OfferDetailPage() {
   const { offerId = '' } = useParams();
@@ -96,10 +97,13 @@ function OfferDetail({ offer }: { offer: OfferResponse }) {
       </header>
 
       {completed ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <RequirementGroup title="Obligatorios" type="OBLIGATORIO" requirements={offer.requirements} />
-          <RequirementGroup title="Deseables" type="DESEABLE" requirements={offer.requirements} />
-        </div>
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            <RequirementGroup title="Obligatorios" type="OBLIGATORIO" requirements={offer.requirements} />
+            <RequirementGroup title="Deseables" type="DESEABLE" requirements={offer.requirements} />
+          </div>
+          <AnalysisPanel offerId={offer.id} />
+        </>
       ) : (
         <RetryExtraction offer={offer} />
       )}
