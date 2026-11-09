@@ -1,5 +1,8 @@
 package com.jobpilot.ai;
 
+import com.jobpilot.analysis.domain.MatchResult;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -29,5 +32,28 @@ public class FakeLlmGateway implements LlmGateway {
     @Override
     public OfferExtraction extractOffer(String rawText) {
         return responses.load("offer-extraction", OfferExtraction.class);
+    }
+
+    /**
+     * Los ids de los requisitos se generan en cada ejecución, así que el JSON lleva los resultados por posición: el
+     * requisito {@code i} recibe el resultado {@code i} (la secuencia se repite si hay más requisitos). Con la oferta
+     * fake da los resultados del Ejemplo 2 del readme (→ 85).
+     */
+    @Override
+    public MatchEvaluation evaluateMatch(ProfileSnapshot profile, List<RequirementSnapshot> requirements) {
+        FakeMatchEvaluation template = responses.load("match-evaluation", FakeMatchEvaluation.class);
+        List<MatchEvaluation.Match> matches = new ArrayList<>();
+        for (int i = 0; i < requirements.size(); i++) {
+            FakeMatchEvaluation.Result result = template.results().get(i % template.results().size());
+            matches.add(new MatchEvaluation.Match(requirements.get(i).id(), result.result(), result.evidence()));
+        }
+        return new MatchEvaluation(matches, template.summary(), template.suggestions());
+    }
+
+    /** Forma de {@code fake-llm/match-evaluation.json}: como {@link MatchEvaluation}, pero sin ids. */
+    record FakeMatchEvaluation(List<Result> results, String summary, List<String> suggestions) {
+
+        record Result(MatchResult result, String evidence) {
+        }
     }
 }

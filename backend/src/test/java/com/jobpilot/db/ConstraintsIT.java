@@ -10,6 +10,8 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -191,6 +193,50 @@ class ConstraintsIT {
                 rows.analysis(offer, profile, 0);
                 rows.analysis(offer, profile, 100);
             }).doesNotThrowAnyException();
+        }
+
+        /** Inserta un análisis con el resumen y las sugerencias (JSON) dados; {@code null} = sin la columna. */
+        private void insertAnalysis(String summary, String suggestionsJson) {
+            UUID user = rows.user();
+            UUID offer = rows.offer(user);
+            UUID profile = rows.profile(user);
+            String columns = suggestionsJson == null ? "" : ", suggestions";
+            String values = suggestionsJson == null ? "" : ", ?::jsonb";
+            Object[] args = suggestionsJson == null
+                    ? new Object[] {UUID.randomUUID(), offer, profile, summary}
+                    : new Object[] {UUID.randomUUID(), offer, profile, summary, suggestionsJson};
+            jdbc.update("INSERT INTO match_analyses (id, offer_id, profile_id, score, has_blocking_gap, summary"
+                    + columns + ", llm_model) VALUES (?, ?, ?, 85, false, ?" + values + ", 'fake')", args);
+        }
+
+        @Test
+        void rechazaUnAnalisisSinResumen() {
+            assertViolates("summary", () -> insertAnalysis(null, TestRows.VALID_SUGGESTIONS));
+        }
+
+        @Test
+        void lasSugerenciasNoTienenValorPorDefecto() {
+            assertViolates("suggestions", () -> insertAnalysis("Resumen", null));
+        }
+
+        /** Una violación por test: tras la primera, la transacción del test queda abortada. */
+        @ParameterizedTest
+        @ValueSource(strings = {"[]", "[\"1\", \"2\"]", "[\"1\", \"2\", \"3\", \"4\", \"5\", \"6\"]"})
+        void rechazaMenosDeTresOMasDeCincoSugerencias(String suggestions) {
+            assertViolates("ck_match_analyses_suggestions_count", () -> insertAnalysis("Resumen", suggestions));
+        }
+
+        @Test
+        void aceptaTresYCincoSugerencias() {
+            assertThatCode(() -> {
+                insertAnalysis("Resumen", "[\"1\", \"2\", \"3\"]");
+                insertAnalysis("Resumen", "[\"1\", \"2\", \"3\", \"4\", \"5\"]");
+            }).doesNotThrowAnyException();
+        }
+
+        @Test
+        void rechazaSugerenciasQueNoSonUnArray() {
+            assertViolates("ck_match_analyses_suggestions", () -> insertAnalysis("Resumen", "{\"a\": 1}"));
         }
 
         @Test

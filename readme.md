@@ -98,9 +98,12 @@ Todo esto es manual, repetitivo y acaba disperso entre pestañas del navegador, 
 puntuación_obligatorios = media de valores de requisitos OBLIGATORIOS
 puntuación_deseables    = media de valores de requisitos DESEABLES
 
-si hay deseables:   score = round(100 × (0,7 × obligatorios + 0,3 × deseables))
-si no hay deseables: score = round(100 × obligatorios)
+si hay obligatorios y deseables: score = round(100 × (0,7 × obligatorios + 0,3 × deseables))
+si no hay deseables:             score = round(100 × obligatorios)
+si no hay obligatorios:          score = round(100 × deseables)
 ```
+
+El redondeo es `HALF_UP` (84,5 → 85) y se aplica sobre el valor exacto.
 
 Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el aviso **"requisito bloqueante"**. Que el LLM *clasifique* y Java *puntúe* es una decisión de diseño deliberada: el número que ve el usuario no depende de la aleatoriedad del modelo y se puede cubrir con tests unitarios.
 
@@ -610,8 +613,8 @@ erDiagram
         uuid profile_id FK "NOT NULL"
         smallint score "NOT NULL, CHECK 0-100"
         boolean has_blocking_gap "NOT NULL"
-        text summary
-        jsonb suggestions "NOT NULL, array JSON de strings"
+        text summary "NOT NULL"
+        jsonb suggestions "NOT NULL, array JSON de 3 a 5 strings"
         varchar llm_model "NOT NULL"
         timestamptz created_at "NOT NULL"
     }
@@ -756,8 +759,8 @@ Al reintentar la extracción de una oferta se borran sus requisitos **y sus aná
 | profile_id | UUID | FK → profiles.id, NOT NULL, ON DELETE CASCADE; INDEX (profile_id) | |
 | score | SMALLINT | NOT NULL, CHECK 0–100 | Calculado por `MatchScoreCalculator`. |
 | has_blocking_gap | BOOLEAN | NOT NULL | Algún requisito obligatorio sin cumplir. |
-| summary | TEXT | | Resumen breve del encaje. |
-| suggestions | JSONB | NOT NULL DEFAULT '[]', CHECK (jsonb_typeof(suggestions) = 'array') | 3–5 sugerencias accionables (el número lo valida la aplicación). |
+| summary | TEXT | NOT NULL | Resumen breve del encaje. `NOT NULL` desde `V3__match_analyses_summary_suggestions.sql` (JP-BE-06). |
+| suggestions | JSONB | NOT NULL (sin valor por defecto), CHECK (jsonb_typeof(suggestions) = 'array'), CHECK de 3 a 5 elementos | 3–5 sugerencias accionables. La aplicación lo valida en la respuesta del LLM y la BD lo garantiza con `ck_match_analyses_suggestions_count` (`V3`, JP-BE-06): `CASE WHEN jsonb_typeof(suggestions) = 'array' THEN jsonb_array_length(suggestions) BETWEEN 3 AND 5 ELSE false END`. El `CASE` evita que `jsonb_array_length` falle con un error que no es de restricción si el valor no es un array. |
 | llm_model | VARCHAR(80) | NOT NULL | Modelo usado (trazabilidad). |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
@@ -882,6 +885,8 @@ Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 | 404 | `not-found` | Recurso no encontrado | El recurso no existe o es de otro usuario |
 | 409 | `email-already-registered` | Email ya registrado | Registro con un email que ya existe (sin distinguir mayúsculas) |
 | 409 | `offer-already-extracted` | La oferta ya tiene sus requisitos extraídos | `POST /offers/{offerId}/extraction` sobre una oferta COMPLETADA |
+| 409 | `profile-required` | Necesitas crear tu perfil | `POST /offers/{offerId}/analysis` de un usuario que aún no tiene perfil (el frontend lo lleva a crearlo) |
+| 409 | `offer-not-extracted` | La oferta no tiene requisitos extraídos | `POST /offers/{offerId}/analysis` sobre una oferta PENDIENTE o FALLIDA, o sin requisitos |
 | 409 | *(uno por caso)* | *(uno por caso)* | Otros conflictos de negocio, p. ej. `invalid-status-transition` · "Transición de estado no permitida" |
 | 429 | `rate-limit-exceeded` | Demasiadas peticiones | Límite de IA por usuario o de intentos de login superado (ver 2.5), con la cabecera `Retry-After` (segundos) |
 | 500 | `internal-error` | Error interno | Error no controlado (la traza solo va al log) |
@@ -901,8 +906,8 @@ Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de
 | POST | `/offers/{offerId}/extraction` 🤖 | — | 200 `OfferResponse`. Reintenta la extracción de una oferta PENDIENTE o FALLIDA y borra los requisitos y análisis anteriores en una sola transacción. Si la IA vuelve a fallar, queda FALLIDA | 404, 409 `offer-already-extracted` (la oferta ya está COMPLETADA) | F2 — Reintentar la extracción |
 | GET | `/offers` | — | 200 `OfferSummary[]` (incluye `latestScore`, `hasBlockingGap` y `applicationStatus`) | — | F2 — Dashboard |
 | GET | `/offers/{offerId}` | — | 200 `OfferResponse` | 404 | F2 — Detalle |
-| POST | `/offers/{offerId}/analysis` ⭐ 🤖 | — | 201 `AnalysisResponse` | 404, 409 | **F3 — Calcular el encaje** |
-| GET | `/offers/{offerId}/analysis` | — | 200 `AnalysisResponse` (el más reciente) | 404 | F3 — Último análisis |
+| POST | `/offers/{offerId}/analysis` ⭐ 🤖 | — | 201 `AnalysisResponse`. Crea un análisis nuevo cada vez (se guarda un histórico) | 404, 409 `profile-required` / `offer-not-extracted` | **F3 — Calcular el encaje** |
+| GET | `/offers/{offerId}/analysis` | — | 200 `AnalysisResponse` (el más reciente) | 404 (la oferta no existe, es de otro usuario o aún no tiene análisis) | F3 — Último análisis |
 | POST | `/offers/{offerId}/documents` 🤖 | `CreateDocumentRequest` `{type}` | 201 `DocumentResponse` (versión nueva generada por la IA) | 404, 409 (no hay análisis) | F4 — Generar carta o CV adaptado |
 | GET | `/offers/{offerId}/documents?type=CARTA\|CV_ADAPTADO` | — | 200 `DocumentHistoryResponse` (última versión completa + lista de versiones) | 404 | F4 — Ver el documento y su historial |
 | POST | `/documents/{documentId}/versions` | `CreateDocumentVersionRequest` `{contentMarkdown}` | 201 `DocumentResponse` con id nuevo y `editedByUser: true` | 404, 409 (otra edición ha creado esa versión antes) | F4 — Guardar la edición como versión nueva |
@@ -974,7 +979,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: El usuario no tiene perfil o la oferta no tiene requisitos extraídos
+          description: El usuario no tiene perfil (profile-required) o la oferta no tiene requisitos extraídos (offer-not-extracted)
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -1416,7 +1421,7 @@ Respuesta `201 Created`:
 
 #### Ejemplo 2 — `POST /api/v1/offers/{offerId}/analysis`
 
-Respuesta `201 Created` (obligatorios: CUMPLE, CUMPLE, CUMPLE → 1,0; deseables: PARCIAL, NO_CUMPLE, CUMPLE → 0,5 · score = round(100 × (0,7 × 1,0 + 0,3 × 0,5)) = **85**):
+Respuesta `201 Created` para la oferta del Ejemplo 1 (obligatorios a1–a3: CUMPLE, CUMPLE, CUMPLE → 1,0; deseables a4–a6: PARCIAL, NO_CUMPLE, CUMPLE → 0,5 · score = round(100 × (0,7 × 1,0 + 0,3 × 0,5)) = **85**). `matches` lleva un elemento por requisito, en el orden de la oferta:
 
 ```json
 {
@@ -1427,8 +1432,11 @@ Respuesta `201 Created` (obligatorios: CUMPLE, CUMPLE, CUMPLE → 1,0; deseables
   "summary": "Cumples todos los requisitos obligatorios. Tu principal margen de mejora está en Docker.",
   "matches": [
     { "requirementId": "a1…", "description": "Al menos 1 año de experiencia con Java y Spring Boot", "type": "OBLIGATORIO", "result": "CUMPLE", "evidence": "Prácticas de 12 meses como desarrollador Java (Spring Boot) en …" },
+    { "requirementId": "a2…", "description": "Conocimientos de SQL y PostgreSQL", "type": "OBLIGATORIO", "result": "CUMPLE", "evidence": "APIs REST sobre PostgreSQL en el puesto actual" },
+    { "requirementId": "a3…", "description": "Uso de Git", "type": "OBLIGATORIO", "result": "CUMPLE", "evidence": "Control de versiones con Git en todos los proyectos" },
     { "requirementId": "a4…", "description": "Experiencia con React", "type": "DESEABLE", "result": "PARCIAL", "evidence": "Proyecto personal con React; sin experiencia profesional" },
-    { "requirementId": "a5…", "description": "Docker", "type": "DESEABLE", "result": "NO_CUMPLE", "evidence": null }
+    { "requirementId": "a5…", "description": "Docker", "type": "DESEABLE", "result": "NO_CUMPLE", "evidence": null },
+    { "requirementId": "a6…", "description": "Inglés B2", "type": "DESEABLE", "result": "CUMPLE", "evidence": "Inglés B2" }
   ],
   "suggestions": [
     "Pon tu experiencia con Spring Boot en la primera línea del resumen.",
@@ -1712,7 +1720,9 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
    - `POST /api/v1/offers/{offerId}/analysis` → 201 + `AnalysisResponse`.
    - `GET /api/v1/offers/{offerId}/analysis` → último análisis o 404.
    - Límite de peticiones (Bucket4j, 30/h por usuario) y `Semaphore` de 3 llamadas simultáneas, compartidos con el resto de endpoints de IA (ver 2.5) → 429 / 503.
-5. **Fake** — `FakeLlmGateway` devuelve una evaluación fija leída de `src/main/resources/fake-llm/match-evaluation.json` para los tests de integración y E2E.
+5. **Fake** — `FakeLlmGateway` devuelve una evaluación fija leída de `src/main/resources/fake-llm/match-evaluation.json` para los tests de integración y E2E. Como los ids de los requisitos se generan en cada ejecución, el JSON lleva los resultados **por posición** (CUMPLE, CUMPLE, CUMPLE, PARCIAL, NO_CUMPLE, CUMPLE) y el fake los asigna en orden a los requisitos que recibe, repitiendo la secuencia si hay más. Con la oferta fake del Ejemplo 1 da **85**.
+6. **Datos que van al LLM** — solo el perfil estructurado (titular, resumen, años de experiencia, ubicación, habilidades, experiencias, formación e idiomas) y los requisitos (id, descripción, tipo y categoría), como JSON en los bloques `<perfil>` y `<requisitos>`. Nunca el texto en bruto del CV, ni el nombre ni el email del usuario.
+7. **Esquema** — `V3__match_analyses_summary_suggestions.sql`: `summary NOT NULL` y entre 3 y 5 sugerencias (ver 3.2).
 
 **Criterios de aceptación**
 
@@ -1728,10 +1738,11 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
 
 - `MatchScoreCalculatorTest` (`@ParameterizedTest`, al menos 8 casos: todo cumple, nada cumple, sin deseables, solo un requisito, casos límite de redondeo 84,5 → 85, lista vacía).
 - `MatchEvaluationValidatorTest`: un id que falta, un id duplicado, un id desconocido, pocas o demasiadas sugerencias.
-- `MatchAnalysisServiceTest` (Mockito): orquestación, reintento ante una respuesta no válida, no se llama al LLM si no hay perfil.
+- `MatchEvaluationParserTest` (adaptador real con un `ChatModel` simulado): perfil y requisitos delimitados como datos; reintento ante una respuesta no válida → `LlmInvalidResponseException`. El reintento lo hace `StructuredLlmCall`, dentro del gateway, no el servicio.
+- `MatchAnalysisServiceTest` (Mockito): orquestación, orden de las comprobaciones (404 → 409), no se llama al LLM ni se gasta cupo si no hay perfil, y no se guarda nada si el LLM falla.
 - `AnalysisControllerIT` (Testcontainers + MockMvc + `FakeLlmGateway`): 201 / 401 / 404 / 409.
 
-**Definición de hecho:** cobertura ≥ 90 % en `analysis.domain`, tests en verde en la CI, contrato OpenAPI actualizado, PR revisado.
+**Definición de hecho:** cobertura ≥ 90 % en `analysis.domain` (la comprueba JaCoCo en `mvnw verify`: `jacoco:check` sobre las líneas de ese paquete, con los unitarios y los IT; informe en `backend/target/site/jacoco/index.html`), tests en verde en la CI, contrato OpenAPI actualizado, PR revisado.
 
 ### Ticket 3 — JP-FE-06: Tablero kanban de candidaturas
 

@@ -12,6 +12,9 @@ public final class TestRows {
     /** Texto de oferta con la longitud mínima que exige {@code ck_job_offers_raw_text_length} (200). */
     public static final String VALID_RAW_TEXT = "Oferta de prueba. ".repeat(12);
 
+    /** Sugerencias de un análisis: entre 3 y 5, como exige {@code ck_match_analyses_suggestions_count}. */
+    public static final String VALID_SUGGESTIONS = "[\"Sugerencia 1\", \"Sugerencia 2\", \"Sugerencia 3\"]";
+
     private final JdbcTemplate jdbc;
 
     public TestRows(JdbcTemplate jdbc) {
@@ -68,8 +71,10 @@ public final class TestRows {
     public UUID analysis(UUID offerId, UUID profileId, int score) {
         UUID id = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO match_analyses (id, offer_id, profile_id, score, has_blocking_gap, llm_model)
-                VALUES (?, ?, ?, ?, false, 'fake')""", id, offerId, profileId, score);
+                INSERT INTO match_analyses (id, offer_id, profile_id, score, has_blocking_gap, summary, suggestions,
+                                            llm_model)
+                VALUES (?, ?, ?, ?, false, 'Resumen', ?::jsonb, 'fake')""", id, offerId, profileId, score,
+                VALID_SUGGESTIONS);
         return id;
     }
 
