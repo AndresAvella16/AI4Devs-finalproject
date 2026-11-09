@@ -26,8 +26,8 @@
 | **Implementación** | Claude Code (terminal, Windows) | Claude Opus 5.5 (modelo por defecto de Claude Code) | Implementación ticket a ticket con el comando `/ticket`, guiada por el `readme.md` y el `CLAUDE.md`. |
 | **Revisión de cada plan** | Claude (claude.ai, Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Revisar el plan de cada `/ticket` antes de dar el OK, preparar las respuestas a sus dudas y las descripciones de las PRs. Un segundo modelo que no ha escrito el código actúa como revisor. |
 | **Pruebas** | Claude Code | Claude Opus 5.5 | Tests primero en cada ticket (fase 2 de `/ticket`): unitarios, de integración con Testcontainers y prueba real con el perfil `dev`. El E2E con Playwright está previsto para la Entrega 3. |
-| **Despliegue** | Claude Code (previsto) | Claude Opus 5.5 | Dockerfile multi-stage, `docker-compose.yml` y workflow de GitHub Actions. |
-| **Mantenimiento** | Claude Code (previsto) | Claude Opus 5.5 | Revisión de PRs, refactorización y actualización de la documentación. |
+| **Despliegue** | Claude Code | Claude Opus 5.5 | Dockerfiles multi-stage, nginx con CSP, `docker-compose.yml` y `docker-compose.e2e.yml`, pipeline de GitHub Actions y Dependabot (JP-OPS-01). El despliegue público (opcional) queda para la Entrega 3. |
+| **Mantenimiento** | Claude (claude.ai) y Claude Code | Claude Opus 5.5 | Actualización del readme y de este archivo al cerrar cada bloque de tickets (PR #5 y cierre de la Entrega 2), deuda técnica documentada en cada ticket y comprobación del estado del repo antes de cada paso. |
 
 Además, **la IA forma parte del producto**: el backend usa Claude a través de Spring AI para estructurar CVs, extraer requisitos, evaluar el encaje y redactar cartas. Dentro del producto se usa **Claude Sonnet 5.5** (`claude-sonnet-5-5`, configurable con `ANTHROPIC_MODEL`), elegido por coste y velocidad. Para desarrollar se usa Opus 5.5.
 
@@ -49,14 +49,19 @@ Además, **la IA forma parte del producto**: el backend usa Claude a través de 
 | Estructura de la documentación | Exigí seguir las plantillas oficiales del máster en lugar del formato libre que proponía la IA. |
 | Revisión de versiones | Pedí revisar que la documentación cumpliera los requisitos de la entrega; a raíz de esa revisión se actualizó el stack a Spring Boot 4 / Spring AI 2.0, porque la propuesta inicial usaba una versión ya sin soporte. |
 | Revisión de arquitectura (2.1) | Ejecuté la revisión en un chat nuevo, para que no la hiciera la misma conversación que había escrito el documento. Acepté, entre otros, los cambios sobre la gestión de errores del LLM (504 / 503 / 502). |
-| Revisión de coherencia (secciones 3, 4 y 6) | La revisión destapó que tres cambios que yo había aceptado en la ronda de la 2.1 contradecían otras secciones. **Lección:** después de aceptar un cambio hay que cruzarlo con el resto del documento. De las 24 incoherencias encontradas, **decidí corregir la 1 a la 11**, que son las que afectan al flujo principal, y dejar la 12 a la 24 (tipos, textos y ajustes menores) para antes de la Entrega 2. |
+| Revisión de coherencia (secciones 3, 4 y 6) | La revisión destapó que tres cambios que yo había aceptado en la ronda de la 2.1 contradecían otras secciones. **Lección:** después de aceptar un cambio hay que cruzarlo con el resto del documento. De las 24 incoherencias encontradas, **decidí corregir la 1 a la 11**, que son las que afectan al flujo principal, y dejar la 12 a la 24 (tipos, textos y ajustes menores) para antes de la Entrega 2. **Cumplido:** al cerrar la Entrega 2 están resueltas todas salvo la 24 (`llm_model` en `generated_documents`, opcional), que se hará con JP-BE-07, el ticket que crea esos documentos. |
 | Revisión del modelo de datos (sección 3) | Apliqué el diff completo de la IA (FKs compuestas, índices documentados, `CHECK` nuevos, `VARCHAR(3)` para la moneda) y alineé el ticket de base de datos. Mantuve JSONB en idiomas, formación y sugerencias porque nunca se filtran por ellos en SQL. |
 | Revisión de cada plan de `/ticket` (Entrega 2) | No di nunca el OK a un plan sin revisarlo, y respondí a **todas** sus dudas numeradas, no solo a algunas. El detalle por ticket está en la sección 6 → Prompt 3. |
 | Prueba real además de los tests | Exigí en cada ticket arrancar la app con el perfil `dev` contra la BD de Docker antes del commit. En JP-BE-01 detectó un `.env` vacío y comentarios en la misma línea que el valor, que los tests con Testcontainers no ven. |
 | Versiones por compatibilidad | Fijé Spring Boot 4.1.x (no una versión menor posterior) porque Spring AI 2.0 solo soporta Boot 4.0/4.1. |
 | Seguridad: menos código propio | La IA detectó que JJWT arrastra Jackson 2 y Boot 4 usa Jackson 3, y propuso un adaptador propio. Elegí el soporte de JWT de Spring Security (OAuth2 Resource Server, Nimbus) para no escribir ni el adaptador ni el filtro JWT. |
 | Coste del LLM | Elegí `claude-sonnet-5-5` como modelo por defecto del producto en vez de Opus: es suficiente para extraer y evaluar requisitos, y más rápido y barato. |
-| Datos personales | Pedí que no se registren en los logs ni los cuerpos de las peticiones ni los prompts y respuestas del modelo, porque contienen datos del CV. |
+| Datos personales | Pedí que no se registren en los logs ni los cuerpos de las peticiones ni los prompts y respuestas del modelo, porque contienen datos del CV. Al LLM solo se envía el perfil estructurado, sin el texto del CV, nombre ni email. Las capturas del readme se recortaron para que no se viera mi navegador. |
+| Probarlo yo en el navegador | Además de la prueba de Claude Code con curl, probé cada pantalla en el navegador. Encontré dos fallos que ni los tests ni el smoke test veían: una URL de la API absoluta que la CSP bloqueaba (JP-OPS-01; ahora el smoke test lo comprueba) y una URL no válida que bloqueaba el botón sin mostrar el error (JP-FE-03; ahora tiene test). |
+| No perder datos del usuario | En JP-BE-05 la IA propuso guardar la oferta solo después de llamar al LLM. Lo cambié a PENDIENTE → LLM → COMPLETADA/FALLIDA para que el texto pegado no se pierda nunca, ni con errores que no son de IA. |
+| Cumplir lo comprometido | El plan de JP-BE-06 se dejaba las incoherencias 15–17 y la cobertura ≥ 90 % de la definición de hecho del readme. Pedí incluirlas (migración V3 y JaCoCo), y comprobar antes que los datos de prueba cumplían las nuevas restricciones para que la migración no fallara sobre una BD existente. |
+| Pensar en quien evalúa | En JP-FE-04, un usuario recién registrado no tiene perfil: en vez de mandarlo a una 404, pedí un placeholder en `/perfil` que explica que llegará en la próxima versión. |
+| IA real frente a coste | Decidí cerrar la Entrega 2 en modo `fake`, documentándolo con claridad en el readme, y decidir en la Entrega 3 entre la API de Anthropic (unos pocos euros) y un modelo local con Ollama (gratis, otro adaptador del puerto `LlmGateway`). |
 
 ---
 
@@ -161,7 +166,7 @@ conocido (por ejemplo, Spring AI y la versión de Spring Boot). Formato: tabla
 componente | versión | nota.
 ```
 
-**Prompt 3:** ⏳ (Entrega 2) Simplificación para un perfil junior
+**Prompt 3:** ⏳ (Entrega 3) Simplificación para un perfil junior. *No hizo falta en la Entrega 2: el stack se mantuvo, y solo se cambió JJWT por el soporte de JWT de Spring Security (ver sección 6).*
 
 ```
 De estos componentes, ¿cuáles podría eliminar o sustituir por algo más simple sin
@@ -204,7 +209,7 @@ llame a la API. No implementes todavía ninguna funcionalidad. Verifica que
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 2) Docker Compose y Dockerfiles
+**Prompt 2:** Docker Compose y Dockerfiles. *Se hizo con `/ticket JP-OPS-01` (ver sección 6 → Prompt 3).* Ajuste humano: CSP con `script-src 'self'` estricto y `style-src 'unsafe-inline'` (dnd-kit usa estilos en línea), comprobar que la herramienta del healthcheck existe en la imagen y que el perfil `e2e` no arranque con la IA real.
 
 ```
 Genera un Dockerfile multi-stage para el backend (Maven → eclipse-temurin:21-jre,
@@ -214,7 +219,7 @@ docker-compose.yml con postgres:16 (volumen persistente), backend y frontend, le
 las variables de .env. Añade docker-compose.e2e.yml con LLM_MODE=fake.
 ```
 
-**Prompt 3:** ⏳ (Entrega 2) Pipeline de CI
+**Prompt 3:** Pipeline de CI. *Se hizo con `/ticket JP-OPS-01`: jobs `backend` y `frontend` en paralelo y `e2e` con smoke test (Playwright llegará con JP-QA-01).* Ajuste humano: Dependabot semanal, agrupado y con un máximo de 3 PRs abiertas; la primera ejecución real en GitHub salió en verde.
 
 ```
 Crea .github/workflows/ci.yml con tres jobs: backend (./mvnw verify, que incluye los
@@ -320,7 +325,7 @@ idempotente con ON CONFLICT DO NOTHING.
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 2) Validación del contrato OpenAPI
+**Prompt 2:** ⏳ (Entrega 3) Validación del contrato OpenAPI. *En la Entrega 2 la sintaxis del YAML y los `$ref` se validaron con `openapi-spec-validator`, y cada ticket comprobó sus endpoints en Swagger UI.*
 
 ```
 Valida este YAML OpenAPI 3.0.3 (sección 4 de mi readme.md): errores de sintaxis,
@@ -357,13 +362,23 @@ difiere | corrección propuesta.
 
 Siguiendo el consejo de la IA, marqué como `nullable` los campos de los schemas nuevos que admiten NULL en la base de datos. Al pasar `POST /offers` a devolver ofertas FALLIDA sin título, también marqué como `nullable` `OfferResponse.title` y `ApplicationResponse.offerTitle`, para no abrir una incoherencia nueva. Después apliqué también el diff de la sección 3 (ver sección 3 → Prompt 2), lo que resolvió además las filas 19 (ticket 1 alineado) y 21 (`CHECK (board_position >= 0)`). El resto de las filas 12–24 quedan **pendientes para antes de la Entrega 2**.
 
+**Seguimiento en la Entrega 2:**
+
+| Filas | Cómo se resolvieron |
+|---|---|
+| 12, 19, 21, 23 | Ya en la Entrega 1 (títulos nullable, diff de la sección 3, RFC 9457). |
+| 13, 14 | JP-BE-05 (PR #8): salario con min/max nullable por separado y `work_mode NOT NULL DEFAULT 'DESCONOCIDO'` (migración V2). |
+| 15, 16, 17 | JP-BE-06 (PR #9): `summary NOT NULL`, `CHECK` de 3 a 5 sugerencias (migración V3) y Ejemplo 2 con los 6 resultados. |
+| 18, 20, 22 | Cierre de la Entrega 2: regla de `followUpOverdue` alineada con la HU-05, justificación de `profile_skills`/`experiences` y convención del `Clock` en `Europe/Madrid` en la sección 3.2. |
+| 24 | Pendiente (opcional): `llm_model` en `generated_documents`, con JP-BE-07. |
+
 ---
 
 ## 5. Historias de Usuario
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 2) Revisión INVEST
+**Prompt 2:** ⏳ (Entrega 3) Revisión INVEST
 
 ```
 Actúa como Product Owner. Evalúa cada una de estas 5 historias de usuario con los
@@ -386,7 +401,7 @@ priorizando los que podría encontrarse un usuario real en el MVP.
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 2) Orden de implementación y dependencias
+**Prompt 2:** Orden de implementación y dependencias. *Se resolvió en la conversación de revisión con Claude (claude.ai): primero la base (JP-BE-01 → JP-DB-01 → JP-BE-02 → JP-BE-03 → JP-FE-01 → JP-OPS-01) y después el flujo de extremo a extremo (JP-BE-05 → JP-BE-06 → JP-FE-03 → JP-FE-04). Ajuste humano: dejar el perfil desde el CV (JP-BE-04 / JP-FE-02) para la Entrega 3 y usar el perfil de los datos de prueba, para centrar la Entrega 2 en el flujo principal.*
 
 ```
 Con el backlog de la sección 6 de mi readme.md, ordena los tickets para que al final
@@ -412,12 +427,18 @@ Proceso en cada ticket: reviso el plan con un segundo modelo (Claude en claude.a
 | **JP-DB-01** Esquema Flyway, seed y entidades | #2 | Detectó que en Boot 4 hace falta `spring-boot-starter-flyway`, porque con `flyway-core` solo no se ejecuta. Encontró dos errores del readme: la cardinalidad del diagrama 3.1 y la redacción de la convención de índices. Restricciones con nombre para que los tests comprueben cuál falla. | Respondí a las 8 dudas, no solo a las 3 que pedía como prioritarias. Pedí un aviso en el seed sobre `ON CONFLICT DO NOTHING`. Revisé y acepté el cambio en un test de JP-BE-01: arrancaba tres perfiles sobre la misma BD y Flyway lo rechazaba con razón. |
 | **JP-BE-02** Registro, login y JWT | #3 | Detectó el conflicto JJWT/Jackson 2 con Boot 4/Jackson 3. Previó el límite de 72 bytes de BCrypt y que el login tarde lo mismo exista o no el email. Hallazgo: ignorar el token en rutas públicas para que uno caducado no impida volver a entrar. | Cambié JJWT por Spring Security OAuth2 Resource Server (Nimbus): menos código de seguridad propio. Pedí validar el emisor (`iss`). Anoté el límite de intentos de login para JP-BE-05 y abrí la lista de deuda técnica del readme. |
 | **JP-BE-03** `LlmGateway` y modo fake | #4 | Propuso un puerto mínimo en el que cada ticket añade su método, para no inventar DTOs antes de tiempo. Descubrió que la autoconfiguración de Anthropic se activa siempre, y lo resolvió con un `EnvironmentPostProcessor`. Usó `ChatModel` + `BeanOutputConverter` para que el texto del usuario nunca se renderice como plantilla. Añadió un test de arquitectura que impide importar Spring AI fuera de `ai/`. | Sonnet 5.5 como modelo **del producto** (no confundir con el de Claude Code), en vez de Opus, por coste. Prueba real en `dev` sin API key. Anoté como deuda que `LLM_MODE` en el entorno tiene prioridad sobre el perfil `e2e`, con riesgo de gastar API en los tests. |
+| **JP-FE-01** Scaffolding frontend y auth | #6 | Eligió TypeScript 6 y ESLint 9 por compatibilidad con typescript-eslint y jsx-a11y. No guardar la ruta de origen al cerrar sesión (privacidad). Un test detectó dos redirecciones compitiendo tras el login. | Proxy de Vite y `/api/v1` relativa en vez de que Vite lea el `.env` de la raíz (igual que nginx, sin CORS y sin exponer secretos). Acepté `localStorage` para el JWT, pero con el riesgo XSS anotado y sus mitigaciones. Probé el login en el navegador: primer flujo navegador → React → Spring → Postgres. |
+| **JP-OPS-01** Docker Compose, CI y Dependabot | #7 | Dockerfiles multi-stage sin root, nginx con CSP, stack E2E aislado y smoke test. Un test mal planteado reveló que `--llm.mode` como argumento no reproduce la variable de entorno; corrigió el test, no la protección. | CSP compatible con dnd-kit, healthcheck verificado en la imagen, Dependabot con límites. Al probarlo yo, el login fallaba: un `VITE_API_BASE_URL` absoluto en mi `.env` hacía que la CSP bloqueara la llamada. Pedí que el smoke test lo detecte. |
+| **JP-BE-05** Importar ofertas y límites | #8 | Detectó el XSS por URLs `javascript:`, que la BD y Java cuentan caracteres distinto y que el límite por IP no funciona detrás de nginx. | Oferta en PENDIENTE antes de llamar al LLM. Resolver ya la IP real (`forward-headers-strategy: native`) en vez de dejarlo como deuda: la prueba con Docker destapó que nginx permitía falsear la IP. Cerrar las incoherencias 13 y 14 con una migración V2. Borrar los datos de la prueba. |
+| **JP-BE-06** Análisis de encaje | #9 | `MatchScoreCalculator` con `BigDecimal` y redondeo exacto. Fake que asigna resultados por posición (los UUID cambian en cada ejecución). Decidió la regla "sin obligatorios → 100 % deseables" y pidió que la revisara. | Incluir las incoherencias 15–17 y JaCoCo (100 % en `analysis.domain`). No enviar al LLM nombre, email ni el texto del CV. Revisé y acepté la regla de negocio que propuso. |
+| **JP-FE-03** Dashboard, nueva oferta y detalle | #10 | Contador de caracteres igual que el backend, rangos de color con tests en los valores frontera y detalle básico para cerrar la HU-02. | Probándolo en el navegador encontré que una URL no válida bloqueaba el botón sin mostrar el error; ahora se valida al salir del campo, con tests. |
+| **JP-FE-04** Panel de análisis | #11 | Accesible: el resultado lleva texto e icono, no solo color. Conserva el análisis anterior si falla un recálculo. | Placeholder en `/perfil` en vez de una 404 para usuarios sin perfil. Avisar de que recalcular consume una consulta de IA. Capturas del análisis (85 y 42) para el readme. |
 
 ---
 
 ## 7. Pull Requests
 
-> Desde la Entrega 2, cada ticket se cierra con una PR de su rama hacia `main` **dentro de mi repositorio**. No son la entrega, que es rama + Typeform. PRs hasta ahora: #1 (JP-BE-01), #2 (JP-DB-01), #3 (JP-BE-02) y #4 (JP-BE-03).
+> Desde la Entrega 2, cada ticket se cierra con una PR de su rama hacia `main` **dentro de mi repositorio**. No son la entrega, que es rama + Typeform. En la Entrega 2 hay 11 PRs (#1–#11), listadas en la sección 7 del readme; desde la #7 la CI tiene que estar en verde antes de fusionar.
 
 **Prompt 1:** Descripción de la PR. *En la práctica la sustituye la fase 5 de `/ticket`: su resumen (qué se ha hecho, tests, decisiones y cambios en el readme) es la descripción de cada PR. El título es el mensaje del commit en Conventional Commits.* Ajuste humano: comprobar en cada PR que el destino es mi `main` y no el repositorio original de LIDR (es un fork), porque, al ser un fork, GitHub puede proponer el repositorio original como destino.
 
@@ -428,7 +449,7 @@ cómo probarlo en local, riesgos y checklist (tests, documentación, migraciones
 Título en formato Conventional Commits.
 ```
 
-**Prompt 2:** ⏳ (Entrega 2) Revisión independiente (subagente)
+**Prompt 2:** ⏳ (Entrega 3) Revisión independiente (subagente). *En la Entrega 2 este papel lo hizo la revisión de cada plan con Claude en claude.ai (un segundo modelo que no escribe el código).*
 
 ```
 Eres un revisor que no ha participado en el desarrollo. Revisa este diff contra los
