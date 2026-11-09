@@ -1,0 +1,9 @@
+# Perfil de Spring "llm-live" (JP-AI-01): solo lo activa LlmLiveIT, que se ejecuta con .\mvnw.cmd verify -Pllm-live.
+# Llama a la API real de Anthropic. La clave sale de la variable de entorno ANTHROPIC_API_KEY o, si no está, del
+# .env de la raíz del repo (como el perfil dev; ruta relativa a backend/). Nunca se escribe aquí.
+spring:
+  config:
+    import: optional:file:../.env[.properties]
+
+llm:
+  mode: real

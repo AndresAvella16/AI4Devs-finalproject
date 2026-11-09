@@ -23,7 +23,7 @@ import org.springframework.test.context.ActiveProfiles;
  * sección 1.2 y con un seed que se puede ejecutar varias veces. pgcrypto se activa solo en esta BD de test, para
  * verificar el hash BCrypt sin depender de Spring Security.
  */
-@SpringBootTest
+@SpringBootTest(properties = "llm.mode=fake")   // el perfil dev importa ../.env: que su LLM_MODE no cuente
 @ActiveProfiles("dev")
 @Import(PostgresTestcontainer.class)
 class SeedDataIT {

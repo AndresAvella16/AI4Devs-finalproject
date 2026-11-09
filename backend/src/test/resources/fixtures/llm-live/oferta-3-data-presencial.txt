@@ -1,0 +1,17 @@
+Analista de Datos Junior — Grupo Ferralia (empresa ficticia)
+Oficina en Zaragoza, trabajo presencial de lunes a viernes.
+Salario: hasta 27.000 € brutos al año.
+
+Grupo Ferralia, distribuidora de material de construcción, busca un perfil junior para su departamento de negocio.
+
+Requisitos:
+- Grado en Estadística, Matemáticas, Ingeniería Informática o similar.
+- Conocimientos de SQL.
+- Manejo avanzado de Excel.
+- Inglés nivel B1 como mínimo.
+
+Deseable:
+- Python (pandas) para análisis de datos.
+- Experiencia con Power BI o una herramienta similar.
+
+Incorporación inmediata y contrato indefinido tras el periodo de prueba.

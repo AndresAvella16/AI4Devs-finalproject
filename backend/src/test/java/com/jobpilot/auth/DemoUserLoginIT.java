@@ -15,7 +15,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** CA 6: con el perfil dev, las credenciales de prueba del readme (sección 1.4) permiten iniciar sesión. */
-@SpringBootTest
+@SpringBootTest(properties = "llm.mode=fake")   // el perfil dev importa ../.env: que su LLM_MODE no cuente
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
 @Import(PostgresTestcontainer.class)

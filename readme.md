@@ -136,7 +136,7 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 
 ### **1.3. Diseño y experiencia de usuario:**
 
-> Capturas de la Entrega 2 (modo `fake`, usuario de prueba `demo@jobpilot.dev`). El vídeo del recorrido completo se añadirá en la Entrega 3.
+> Capturas de la Entrega 2 (modo `fake`, usuario de prueba `demo@jobpilot.dev`), salvo las dos últimas, hechas con la IA real (`LLM_MODE=real`). El vídeo del recorrido completo se añadirá en la Entrega 3.
 
 **Inicio tras el login**
 
@@ -157,6 +157,16 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 **Análisis con requisitos bloqueantes** — puntuación 42: aviso de requisitos obligatorios no cumplidos y filas señaladas como "Bloqueante".
 
 ![Análisis con requisitos bloqueantes](docs/screenshots/05-analisis-bloqueante-42.png)
+
+**Prueba con la IA real (Claude Sonnet 5.5)**
+
+Oferta real importada con `LLM_MODE=real`: puesto, empresa, modalidad, salario y requisitos extraídos por el modelo.
+
+![Prueba con la IA real: oferta importada](docs/screenshots/06-ia-real-oferta.png)
+
+Análisis de esa oferta: puntuación 32 calculada por `MatchScoreCalculator` a partir de la clasificación del modelo, requisitos bloqueantes y evidencia de cada requisito. JP-AI-01 automatiza esta validación (ver 2.6).
+
+![Prueba con la IA real: análisis de encaje](docs/screenshots/07-ia-real-analisis.png)
 
 **Flujo principal de usuario**
 
@@ -280,6 +290,7 @@ El frontend llama siempre a la ruta relativa `/api/v1`. En desarrollo, el servid
 ```bash
 cd backend && ./mvnw verify                # unitarios + integración (Testcontainers)
 cd frontend && npm test                    # unitarios de componentes (Vitest)
+cd backend && ./mvnw verify -Pllm-live     # solo a mano: validación con el LLM real (JP-AI-01, ver 2.6)
 
 # E2E: stack aislado (proyecto jobpilot-e2e, perfil e2e, LLM_MODE=fake fijo, BD vacía en cada arranque).
 # Usa los puertos 5173 y 8080: para antes el stack de desarrollo (docker compose stop backend frontend).
@@ -530,7 +541,7 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 
 Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil `dev` o Docker Compose). Detectó problemas que los tests automáticos no veían: un `.env` mal formado, una URL de la API absoluta que la CSP bloqueaba, la IP del cliente falsificable a través de nginx y un error de validación de la URL que no se mostraba.
 
-**Previsto para la Entrega 3:** E2E con Playwright del flujo principal (JP-QA-01), tests del tablero (`ApplicationStatusPolicyTest`, `ApplicationControllerIT`), del perfil (`CvTextExtractorTest`) y la validación con el LLM real (`@Tag("llm-live")`). La lista de abajo es el diseño completo de la suite.
+**Previsto para la Entrega 3:** E2E con Playwright del flujo principal (JP-QA-01), tests del tablero (`ApplicationStatusPolicyTest`, `ApplicationControllerIT`), del perfil (`CvTextExtractorTest`). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
 
 **Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
 
@@ -555,7 +566,20 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 
 **Validación con el LLM real (manual / *smoke*, fuera de la CI)**
 
-- Una prueba etiquetada `@Tag("llm-live")` ejecuta la extracción con el modelo real sobre 3 ofertas de ejemplo y valida con criterios flexibles: el JSON cumple el esquema, hay al menos un requisito obligatorio, la modalidad es un valor válido y cada evidencia aparece en el texto del CV.
+- `LlmLiveIT` (`@Tag("llm-live")`, JP-AI-01) arranca la aplicación con `llm.mode=real` y llama al `SpringAiLlmGateway` real. Hace la extracción sobre 3 ofertas ficticias cortas (`src/test/resources/fixtures/llm-live/`) y evalúa el encaje de una de ellas con un perfil de ejemplo. Los criterios son flexibles y nunca se compara texto exacto:
+  - las respuestas pasan Bean Validation y los validadores existentes (`OfferExtractionValidator`, `MatchEvaluationValidator`);
+  - cada oferta tiene al menos un requisito obligatorio y una modalidad válida;
+  - cada requisito tiene exactamente un resultado, y las evidencias de `CUMPLE` y `PARCIAL` no están vacías;
+  - hay entre 3 y 5 sugerencias;
+  - la puntuación de `MatchScoreCalculator` está entre 0 y 100.
+- **Coste:** 4 llamadas por ejecución (3 extracciones y 1 encaje que reutiliza una de ellas), más un posible reintento por respuesta no válida.
+- **Excluido de `mvnw verify` y de la CI** (`excludedGroups` en Surefire y Failsafe). Se ejecuta a mano:
+
+  ```powershell
+  cd backend; .\mvnw.cmd verify -Pllm-live
+  ```
+
+  El perfil Maven `llm-live` solo ejecuta ese grupo, y salta los unitarios y JaCoCo. Necesita Docker para el PostgreSQL de Testcontainers. La clave se lee de `ANTHROPIC_API_KEY`: de una variable de entorno o, si no está, del `.env` de la raíz (perfil de Spring `llm-live`, con `spring.config.import`, como el perfil `dev`). Así no hay que escribirla en la terminal ni queda en el historial. Si no hay clave, los tests aparecen como saltados y el build no falla. El modelo es el de `ANTHROPIC_MODEL` o, si está vacío, `claude-sonnet-5-5`.
 
 **Deuda técnica conocida**
 
@@ -1699,6 +1723,7 @@ Escenario: Seguimiento vencido
 | **JP-FE-06** | **Frontend** | **Tablero kanban de candidaturas** | HU-05 | 5 |
 | JP-QA-01 | Tests | Suite E2E del flujo principal con Playwright | Todas | 3 |
 | JP-OPS-01 | DevOps | Docker Compose y pipeline de CI en GitHub Actions | — | 3 |
+| JP-AI-01 | Tests | Validación con el LLM real (`@Tag("llm-live")`, fuera de la CI) | HU-02, HU-03 | 2 |
 
 A continuación se detallan los tres tickets representativos que pide la plantilla: uno de base de datos, uno de backend y uno de frontend.
 

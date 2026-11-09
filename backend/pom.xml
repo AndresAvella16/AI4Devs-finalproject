@@ -143,10 +143,23 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- *Test: unitarios (Surefire, por defecto) · *IT: integración (Failsafe) -->
+            <!--
+                *Test: unitarios (Surefire) · *IT: integración (Failsafe). Los tests @Tag("llm-live") llaman a la API
+                real de Anthropic: quedan fuera de mvnw verify y de la CI, y solo se ejecutan con -Pllm-live (JP-AI-01).
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>llm-live</excludedGroups>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>llm-live</excludedGroups>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
@@ -207,4 +220,37 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            JP-AI-01: validación con el LLM real (sección 2.6). Uso: cd backend; .\mvnw.cmd verify -Pllm-live
+            Solo ejecuta los IT con @Tag("llm-live"): salta los unitarios y JaCoCo (la regla de cobertura no tiene
+            sentido con un único IT). La clave se lee de ANTHROPIC_API_KEY o del .env de la raíz; sin ella, se saltan.
+        -->
+        <profile>
+            <id>llm-live</id>
+            <properties>
+                <jacoco.skip>true</jacoco.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skipTests>true</skipTests>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <groups>llm-live</groups>
+                            <excludedGroups combine.self="override"/>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
