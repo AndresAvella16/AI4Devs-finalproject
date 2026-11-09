@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw';
+import type { AnalysisResponse } from '../api/analysis';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '../api/auth';
 import type { OfferResponse, OfferSummary } from '../api/offers';
 
@@ -126,6 +127,77 @@ export function failedOffer(overrides: Partial<OfferResponse> = {}): OfferRespon
   });
 }
 
+// ---------------------------------------------------------------------------
+// Análisis de encaje (JP-FE-04): el Ejemplo 2 de la sección 4 y uno con requisito bloqueante.
+// ---------------------------------------------------------------------------
+
+/** Respuesta `201` del Ejemplo 2: obligatorios CUMPLE ×3, deseables PARCIAL / NO_CUMPLE / CUMPLE → 85. */
+export function exampleAnalysis(overrides: Partial<AnalysisResponse> = {}): AnalysisResponse {
+  return {
+    id: 'e3b1f0c4-0000-4000-8000-000000000001',
+    offerId: EXAMPLE_OFFER_ID,
+    score: 85,
+    hasBlockingGap: false,
+    summary: 'Cumples todos los requisitos obligatorios. Tu principal margen de mejora está en Docker.',
+    matches: [
+      {
+        requirementId: 'a1',
+        description: 'Al menos 1 año de experiencia con Java y Spring Boot',
+        type: 'OBLIGATORIO',
+        result: 'CUMPLE',
+        evidence: 'Prácticas de 12 meses como desarrollador Java (Spring Boot)',
+      },
+      {
+        requirementId: 'a2',
+        description: 'Conocimientos de SQL y PostgreSQL',
+        type: 'OBLIGATORIO',
+        result: 'CUMPLE',
+        evidence: 'APIs REST sobre PostgreSQL en el puesto actual',
+      },
+      {
+        requirementId: 'a3',
+        description: 'Uso de Git',
+        type: 'OBLIGATORIO',
+        result: 'CUMPLE',
+        evidence: 'Control de versiones con Git en todos los proyectos',
+      },
+      {
+        requirementId: 'a4',
+        description: 'Experiencia con React',
+        type: 'DESEABLE',
+        result: 'PARCIAL',
+        evidence: 'Proyecto personal con React; sin experiencia profesional',
+      },
+      { requirementId: 'a5', description: 'Docker', type: 'DESEABLE', result: 'NO_CUMPLE', evidence: null },
+      { requirementId: 'a6', description: 'Inglés B2', type: 'DESEABLE', result: 'CUMPLE', evidence: 'Inglés B2' },
+    ],
+    suggestions: [
+      'Pon tu experiencia con Spring Boot en la primera línea del resumen.',
+      'Menciona tu proyecto con React con un enlace al repositorio.',
+      'Añade un Dockerfile a uno de tus proyectos públicos y menciónalo.',
+    ],
+    createdAt: '2026-11-04T16:31:02Z',
+    ...overrides,
+  };
+}
+
+/** Análisis con dos obligatorios NO_CUMPLE (como la oferta de 42 del seed). */
+export function blockingAnalysis(): AnalysisResponse {
+  const base = exampleAnalysis();
+  return {
+    ...base,
+    id: 'e3b1f0c4-0000-4000-8000-000000000002',
+    score: 42,
+    hasBlockingGap: true,
+    summary: 'No cumples dos requisitos obligatorios.',
+    matches: base.matches.map((match) =>
+      match.requirementId === 'a2' || match.requirementId === 'a3'
+        ? { ...match, result: 'NO_CUMPLE', evidence: null }
+        : match,
+    ),
+  };
+}
+
 export const offerHandlers = [
   http.get(`${API}/offers`, () => HttpResponse.json(seedOffers)),
   http.get(`${API}/offers/:offerId`, ({ params }) =>
@@ -133,6 +205,11 @@ export const offerHandlers = [
       ? HttpResponse.json(exampleOffer())
       : problem(404, 'not-found', 'Recurso no encontrado', 'La oferta no existe.'),
   ),
+  // Por defecto la oferta aún no tiene análisis; el POST devuelve el Ejemplo 2.
+  http.get(`${API}/offers/:offerId/analysis`, () =>
+    problem(404, 'not-found', 'Recurso no encontrado', 'La oferta aún no tiene análisis.'),
+  ),
+  http.post(`${API}/offers/:offerId/analysis`, () => HttpResponse.json(exampleAnalysis(), { status: 201 })),
   http.post(`${API}/offers`, () =>
     HttpResponse.json(exampleOffer(), { status: 201, headers: { Location: `/api/v1/offers/${EXAMPLE_OFFER_ID}` } }),
   ),

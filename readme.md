@@ -152,6 +152,8 @@ flowchart LR
 | **Detalle de oferta** | Cabecera (puesto, empresa, modalidad, salario), requisitos agrupados en *obligatorios* y *deseables*, panel de análisis (puntuación circular, tabla de requisitos con ✅ / ⚠️ / ❌ y su evidencia, sugerencias) y pestañas "Carta" / "CV adaptado" con editor y botón "Exportar PDF". |
 | **Tablero** | Kanban de 5 columnas con tarjetas arrastrables (puesto, empresa, puntuación, fecha de seguimiento con aviso si está vencida) y un panel lateral para notas y fechas. |
 
+> **`/perfil` es provisional (JP-FE-04).** Mientras no exista el onboarding, el detalle de oferta lleva a `/perfil` al usuario sin perfil (409 `profile-required` al calcular el encaje). Es una ruta protegida con un *placeholder* ("Crea tu perfil", aviso de que llegará en la próxima versión, sugerencia de probar con `demo@jobpilot.dev` y enlace al dashboard) para que un usuario nuevo no acabe en una 404. JP-FE-02 lo sustituye por el onboarding en la misma ruta.
+
 ### **1.4. Instrucciones de instalación:**
 
 > Estas instrucciones describen la puesta en marcha prevista; se validarán y actualizarán con el código en las Entregas 2 y 3.
@@ -516,6 +518,7 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
 - **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. Si molesta, JP-QA-01 puede mover el stack E2E a otros puertos (el smoke test ya los lee de `FRONTEND_URL` y `BACKEND_URL`).
 - **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; para desplegar en Render habrá que parametrizarlo (ver 2.4).
+- **El bundle del frontend pasa de 500 kB (JP-FE-04).** `npm run build` avisa de que el JS minificado supera los 500 kB (unos 505 kB, 155 kB con gzip) porque toda la SPA va en un único chunk. Se resolverá separando por rutas con `React.lazy` + `import()` (o `lazy` en las rutas de React Router), de modo que el tablero y el editor de documentos se carguen al abrirlos.
 
 ---
 
