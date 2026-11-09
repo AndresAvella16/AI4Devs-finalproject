@@ -128,7 +128,7 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 | F3 | Análisis de encaje | ✅ Operativa de extremo a extremo | JP-BE-06, JP-FE-04 |
 | F1 | Perfil a partir del CV | ⏳ Entrega 3 (la Entrega 2 usa el perfil de los datos de prueba) | JP-BE-04, JP-FE-02 |
 | F4 | Carta y CV adaptados | ⏳ Entrega 3 | JP-BE-07, JP-FE-05 |
-| F5 | Tablero de candidaturas | ⏳ Entrega 3 (el dashboard ya muestra el estado de cada candidatura) | JP-BE-08, JP-FE-06 |
+| F5 | Tablero de candidaturas | 🔧 API operativa (JP-BE-08); el kanban del frontend queda para la Entrega 3 (el dashboard ya muestra el estado de cada candidatura) | JP-BE-08, JP-FE-06 |
 
 **Flujo operativo:** navegador → React (nginx) → API Spring Boot → PostgreSQL, con la IA detrás del puerto `LlmGateway`.
 
@@ -541,7 +541,7 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 
 Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil `dev` o Docker Compose). Detectó problemas que los tests automáticos no veían: un `.env` mal formado, una URL de la API absoluta que la CSP bloqueaba, la IP del cliente falsificable a través de nginx y un error de validación de la URL que no se mostraba.
 
-**Previsto para la Entrega 3:** E2E con Playwright del flujo principal (JP-QA-01), tests del tablero (`ApplicationStatusPolicyTest`, `ApplicationControllerIT`), del perfil (`CvTextExtractorTest`). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
+**Previsto para la Entrega 3:** E2E con Playwright del flujo principal (JP-QA-01) y tests del perfil (`CvTextExtractorTest`). Los tests del tablero en el backend (`ApplicationStatusPolicyTest`, `BoardColumnTest`, `ApplicationServiceTest`, `ApplicationControllerIT`) ya están hechos (JP-BE-08). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
 
 **Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
 
@@ -881,9 +881,9 @@ Como `offer_id` es `NOT NULL` y es la misma columna en las dos FKs, es imposible
 | user_id | UUID | FK → users.id, NOT NULL, ON DELETE CASCADE; INDEX (user_id, status, board_position) | Redundante con el propietario de la oferta; la FK compuesta de abajo garantiza que coinciden. |
 | offer_id | UUID | NOT NULL, UNIQUE; FK compuesta (offer_id, user_id) → job_offers (id, user_id), ON DELETE CASCADE | Una candidatura por oferta, y siempre del mismo usuario que la oferta. |
 | status | VARCHAR(12) | NOT NULL DEFAULT 'GUARDADA', CHECK IN (GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA) | Columna del kanban. |
-| board_position | INTEGER | NOT NULL, CHECK ≥ 0 | Orden dentro de la columna. No es único (reordenar exigiría una restricción diferida); en caso de empate se ordena por `created_at`. |
+| board_position | INTEGER | NOT NULL, CHECK ≥ 0 | Índice de la tarjeta dentro de su columna. Al colocar una tarjeta (cambio de estado o reordenación), el servidor la pone en el índice pedido y renumera de 0 a n−1 la columna de destino y, si cambia de columna, también la de origen (`BoardColumn`, JP-BE-08); un índice mayor que el tamaño de la columna la deja al final, y una tarjeta nueva va al final de GUARDADA. No es único en la BD (exigiría una restricción diferida); si hubiera empates, se ordena por `created_at`. |
 | applied_at | DATE | CHECK (status NOT IN ('ENVIADA','ENTREVISTA','OFERTA') OR applied_at IS NOT NULL) | Se rellena al pasar a ENVIADA. |
-| follow_up_date | DATE | | Si es anterior a hoy y la candidatura no está en OFERTA ni DESCARTADA, la tarjeta se marca como vencida (`followUpOverdue`; se calcula en la consulta, no se guarda), como dice la HU-05. |
+| follow_up_date | DATE | | Si es anterior a hoy y la candidatura no está en OFERTA ni DESCARTADA, la tarjeta se marca como vencida (`followUpOverdue`; se calcula al consultar con el `Clock` de la aplicación, no se guarda), como dice la HU-05. |
 | notes | TEXT | | |
 | version | BIGINT | NOT NULL DEFAULT 0 | `@Version` para el bloqueo optimista. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
@@ -937,7 +937,7 @@ WHERE o.user_id = :userId
 ORDER BY o.created_at DESC;
 ```
 
-El tablero usa el mismo `LATERAL` sobre `applications` filtrado por `user_id` y ordenado por `status, board_position`.
+El tablero usa el mismo `LATERAL` sobre `applications` filtrado por `user_id`, ordenado en el orden de las columnas (GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA, con un `CASE` sobre `status`) y, dentro de cada una, por `board_position, created_at`.
 
 ---
 
@@ -964,7 +964,10 @@ Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 | 409 | `offer-already-extracted` | La oferta ya tiene sus requisitos extraídos | `POST /offers/{offerId}/extraction` sobre una oferta COMPLETADA |
 | 409 | `profile-required` | Necesitas crear tu perfil | `POST /offers/{offerId}/analysis` de un usuario que aún no tiene perfil (el frontend lo lleva a crearlo) |
 | 409 | `offer-not-extracted` | La oferta no tiene requisitos extraídos | `POST /offers/{offerId}/analysis` sobre una oferta PENDIENTE o FALLIDA, o sin requisitos |
-| 409 | *(uno por caso)* | *(uno por caso)* | Otros conflictos de negocio, p. ej. `invalid-status-transition` · "Transición de estado no permitida" |
+| 409 | `application-already-exists` | La oferta ya está en el tablero | `POST /applications` de una oferta que ya tiene candidatura |
+| 409 | `invalid-status-transition` | Transición de estado no permitida | `PATCH /applications/{applicationId}/status` que no cumple las reglas de transición de la HU-05; el `detail` dice de qué estado a cuál |
+| 409 | `version-conflict` | La candidatura ha cambiado | `PATCH /applications/{applicationId}` o `/status` con una `version` que ya no es la guardada (bloqueo optimista) |
+| 409 | *(uno por caso)* | *(uno por caso)* | Otros conflictos de negocio que se añadan |
 | 429 | `rate-limit-exceeded` | Demasiadas peticiones | Límite de IA por usuario o de intentos de login superado (ver 2.5), con la cabecera `Retry-After` (segundos) |
 | 500 | `internal-error` | Error interno | Error no controlado (la traza solo va al log) |
 | 502 | `llm-invalid-response` | Respuesta de la IA no válida | `LlmInvalidResponse` |
@@ -990,9 +993,9 @@ Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de
 | POST | `/documents/{documentId}/versions` | `CreateDocumentVersionRequest` `{contentMarkdown}` | 201 `DocumentResponse` con id nuevo y `editedByUser: true` | 404, 409 (otra edición ha creado esa versión antes) | F4 — Guardar la edición como versión nueva |
 | GET | `/documents/{documentId}/pdf` | — | 200 `application/pdf` (generado en el momento) | 404 | F4 — Exportar a PDF |
 | GET | `/applications` | — | 200 `ApplicationResponse[]` | — | F5 — Tablero |
-| POST | `/applications` | `CreateApplicationRequest` `{offerId}` | 201 `ApplicationResponse` en GUARDADA (historial con `from = NULL`) | 404 (la oferta no existe o es de otro usuario), 409 (ya existe) | F5 — Guardar en el tablero |
-| PATCH | `/applications/{applicationId}` | `UpdateApplicationRequest` (`version` obligatoria) | 200 `ApplicationResponse` | 400, 404, 409 (versión antigua) | F5 — Notas, fechas y **orden dentro de la columna** |
-| PATCH | `/applications/{applicationId}/status` ⭐ | `ChangeStatusRequest` | 200 `ApplicationResponse` | 400 (mismo estado), 404, 409 | **F5 — Cambiar de columna** |
+| POST | `/applications` | `CreateApplicationRequest` `{offerId}` | 201 `ApplicationResponse` en GUARDADA (historial con `from = NULL`) | 404 (la oferta no existe o es de otro usuario), 409 `application-already-exists` | F5 — Guardar en el tablero (también ofertas PENDIENTE o FALLIDA) |
+| PATCH | `/applications/{applicationId}` | `UpdateApplicationRequest` (`version` obligatoria) | 200 `ApplicationResponse`. Solo cambia los campos enviados (`null` borra el valor); no escribe en el historial | 400 (también si se vacía `appliedAt` en ENVIADA, ENTREVISTA u OFERTA), 404, 409 `version-conflict` | F5 — Notas, fechas y **orden dentro de la columna** |
+| PATCH | `/applications/{applicationId}/status` ⭐ | `ChangeStatusRequest` | 200 `ApplicationResponse`. Al pasar a ENVIADA, `appliedAt` pasa a ser hoy si estaba vacía | 400 `validation-error` en `status` (mismo estado), 404, 409 `invalid-status-transition` / `version-conflict` | **F5 — Cambiar de columna** |
 
 ⭐ Endpoints principales detallados en OpenAPI a continuación (la plantilla pide un máximo de 3).
 
@@ -1205,7 +1208,10 @@ components:
       required: [status, boardPosition, version]
       properties:
         status: { type: string, enum: [GUARDADA, ENVIADA, ENTREVISTA, OFERTA, DESCARTADA] }
-        boardPosition: { type: integer, minimum: 0 }
+        boardPosition:
+          type: integer
+          minimum: 0
+          description: Índice en la columna de destino; el servidor renumera la columna. Si es mayor que su tamaño, la tarjeta queda al final
         version:
           type: integer
           format: int64
@@ -1241,7 +1247,10 @@ components:
         notes: { type: string, nullable: true, maxLength: 5000 }
         appliedAt: { type: string, format: date, nullable: true }
         followUpDate: { type: string, format: date, nullable: true }
-        boardPosition: { type: integer, minimum: 0 }
+        boardPosition:
+          type: integer
+          minimum: 0
+          description: Nuevo índice dentro de la misma columna; el servidor renumera la columna
         version:
           type: integer
           format: int64

@@ -1,5 +1,9 @@
 # CLAUDE.md — JobPilot
 
+## Idioma
+
+Responde siempre en español (también los resúmenes y las dudas). El código, los identificadores y los nombres técnicos van en inglés; los commits, en español con Conventional Commits.
+
 Copiloto de búsqueda de empleo con IA. Proyecto final del máster AI4Devs (Andrés Avellá Navarro).
 El usuario sube su CV, pega ofertas de trabajo y obtiene un análisis de encaje, una carta y un CV adaptados, y un tablero kanban de candidaturas.
 

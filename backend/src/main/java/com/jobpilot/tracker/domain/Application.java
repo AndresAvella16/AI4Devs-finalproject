@@ -60,6 +60,60 @@ public class Application {
         this.updatedAt = createdAt;
     }
 
+    /** Fila del historial que registra la creación ({@code from_status} NULL). */
+    public ApplicationStatusHistory creationHistory() {
+        return new ApplicationStatusHistory(this, null, status, createdAt);
+    }
+
+    /**
+     * Cambia de columna. Al pasar a ENVIADA, la fecha de envío pasa a ser hoy si estaba vacía (HU-05). La transición
+     * ya la ha validado {@link ApplicationStatusPolicy}.
+     *
+     * @return la fila del historial que registra el cambio
+     */
+    public ApplicationStatusHistory changeStatus(ApplicationStatus to, LocalDate today, Instant now) {
+        ApplicationStatus from = status;
+        status = to;
+        if (to == ApplicationStatus.ENVIADA && appliedAt == null) {
+            appliedAt = today;
+        }
+        updatedAt = now;
+        return new ApplicationStatusHistory(this, from, to, now);
+    }
+
+    public void editNotes(String notes, Instant now) {
+        this.notes = notes;
+        updatedAt = now;
+    }
+
+    /** Vaciarla solo es válido si el estado no la exige; lo comprueba el servicio antes (→ 400). */
+    public void editAppliedAt(LocalDate appliedAt, Instant now) {
+        this.appliedAt = appliedAt;
+        updatedAt = now;
+    }
+
+    public void editFollowUpDate(LocalDate followUpDate, Instant now) {
+        this.followUpDate = followUpDate;
+        updatedAt = now;
+    }
+
+    public void touch(Instant now) {
+        updatedAt = now;
+    }
+
+    /** Solo lo usa {@link BoardColumn}, que mantiene las posiciones de la columna de 0 a n−1. */
+    void moveTo(int position) {
+        boardPosition = position;
+    }
+
+    /**
+     * Seguimiento vencido (HU-05): la fecha de seguimiento es anterior a hoy y la candidatura no está cerrada
+     * (OFERTA o DESCARTADA). No se guarda; se calcula al consultar.
+     */
+    public static boolean isFollowUpOverdue(ApplicationStatus status, LocalDate followUpDate, LocalDate today) {
+        return followUpDate != null && followUpDate.isBefore(today) && !status.isClosed();
+    }
+
     public UUID getId() {
         return id;
     }
