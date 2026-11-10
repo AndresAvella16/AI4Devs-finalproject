@@ -162,6 +162,15 @@ describe('KanbanBoard — ver el tablero', () => {
     await user.click(within(error).getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findAllByTestId('application-card')).toHaveLength(5);
   });
+
+  it('cada tarjeta lleva el id de su oferta en data-offer-id (los E2E la localizan así, JP-QA-01)', async () => {
+    renderBoard();
+    const cards = await screen.findAllByTestId('application-card');
+
+    expect(cards.map((card) => card.dataset.offerId).sort()).toEqual(
+      storedApplications().map((application) => application.offerId).sort(),
+    );
+  });
 });
 
 describe('KanbanBoard — mover tarjetas con el teclado', () => {
@@ -309,6 +318,8 @@ describe('KanbanBoard — pantallas de menos de 768 px', () => {
 
     const panel = screen.getByRole('tabpanel');
     const first = nth(within(panel).getAllByTestId('application-card'), 0);
+    const guardadas = storedApplications().filter((application) => application.status === 'GUARDADA');
+    expect(guardadas.map((application) => application.offerId)).toContain(first.dataset.offerId);
     const select = within(first).getByLabelText('Mover a…');
     expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Elige columna',

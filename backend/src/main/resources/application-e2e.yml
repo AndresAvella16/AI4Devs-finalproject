@@ -1,10 +1,24 @@
-# Perfil e2e: tests E2E con Playwright contra docker-compose.e2e.yml (JP-QA-01 / JP-OPS-01).
-# JP-QA-01 añadirá el seed de E2E.
+# Perfil e2e: tests E2E con Playwright (e2e/) contra docker-compose.e2e.yml (JP-QA-01 / JP-OPS-01).
+
+spring:
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/e2e-seed     # usuario e2e@jobpilot.test con perfil (no el seed de dev)
 
 llm:
   # Los E2E no llaman a la IA real. Una variable de entorno LLM_MODE tendría prioridad sobre este valor, así que
   # docker-compose.e2e.yml fija LLM_MODE=fake y LlmModeEnvironmentPostProcessor rechaza LLM_MODE=real con este perfil.
   mode: fake
+
+jobpilot:
+  rate-limit:
+    ai:
+      # Cada ejecución de la suite gasta 2 llamadas (extracción + análisis) del mismo usuario del seed: con el cupo
+      # normal (30/h) la 16.ª ejecución en una hora sobre el mismo stack daría 429. El LLM fake no tiene coste.
+      # El login (10/min por IP + email) no se toca: la suite hace un login por ejecución.
+      capacity: 10000
+      period: 1h
 
 logging:
   level:

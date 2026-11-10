@@ -1,12 +1,14 @@
 # Stack para los tests E2E (JP-OPS-01 / JP-QA-01). Proyecto aparte (jobpilot-e2e): no toca los contenedores
 # ni el volumen de docker-compose.yml.
 #   docker compose -f docker-compose.e2e.yml up -d --build --wait
-#   ./scripts/smoke-test.sh                       # hasta JP-QA-01; después, cd e2e && ./mvnw test
+#   ./scripts/smoke-test.sh                       # smoke test HTTP (cabeceras de nginx, CSP, login)
+#   cd e2e && ./mvnw test                         # Playwright: flujo principal (JP-QA-01)
 #   docker compose -f docker-compose.e2e.yml down
 #
 # - Perfil e2e y LLM_MODE=fake FIJO: no se lee de .env ni del entorno, así que los E2E nunca llaman a la API
 #   de Anthropic. Además, el backend se niega a arrancar con el perfil e2e y LLM_MODE=real.
-# - BD efímera en memoria (tmpfs): cada "up" empieza con la base de datos vacía. No se publica el puerto 5432.
+# - BD efímera en memoria (tmpfs): cada "up" empieza con la base de datos vacía, más el seed de E2E del perfil e2e
+#   (db/e2e-seed: usuario e2e@jobpilot.test con perfil). No se publica el puerto 5432.
 # - Usa los mismos puertos que docker-compose.yml (5173 y 8080): para el stack de desarrollo antes de levantarlo.
 # - POSTGRES_USER, POSTGRES_PASSWORD y JWT_SECRET se leen de .env en local; en la CI se generan en cada ejecución.
 
