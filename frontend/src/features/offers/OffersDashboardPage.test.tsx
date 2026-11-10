@@ -1,10 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import type { OfferSummary } from '../../api/offers';
 import { saveSession } from '../../api/session';
 import { createQueryClient } from '../../app/queryClient';
-import { API, authResponse, problem, seedOffers } from '../../test/handlers';
+import { API, authResponse, noProfile, problem, seedOffers } from '../../test/handlers';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { server } from '../../test/server';
 
@@ -138,5 +138,24 @@ describe('OffersDashboardPage — dashboard de ofertas', () => {
 
     expect(await screen.findByRole('heading', { name: 'Nueva oferta' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/ofertas/nueva');
+  });
+
+  it('sin perfil (GET /profile → 404) invita a crearlo (JP-FE-02)', async () => {
+    server.use(noProfile());
+    const { user, router } = renderDashboard();
+
+    const cta = await screen.findByTestId('profile-missing-cta');
+    expect(cta).toHaveTextContent('Crea tu perfil');
+    await user.click(within(cta).getByRole('link', { name: 'Crear mi perfil' }));
+
+    // /perfil se carga con lazy: la navegación termina cuando llega su chunk.
+    await waitFor(() => expect(router.state.location.pathname).toBe('/perfil'));
+  });
+
+  it('con perfil no muestra el aviso de crearlo', async () => {
+    renderDashboard();
+
+    await screen.findByTestId('offer-list');
+    expect(screen.queryByTestId('profile-missing-cta')).not.toBeInTheDocument();
   });
 });

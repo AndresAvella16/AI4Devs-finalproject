@@ -10,6 +10,7 @@ import {
   exampleAnalysis,
   exampleOffer,
   failedOffer,
+  noProfile,
   problem,
 } from '../../test/handlers';
 import { createQueryClient } from '../../app/queryClient';
@@ -143,6 +144,7 @@ describe('AnalysisPanel — análisis de encaje en el detalle de la oferta (HU-0
 
   it('sin perfil (409 profile-required) lleva a crear el perfil', async () => {
     server.use(
+      noProfile(),
       http.post(`${API}/offers/:offerId/analysis`, () =>
         problem(409, 'profile-required', 'Necesitas crear tu perfil', 'Crea tu perfil antes de calcular el encaje.'),
       ),
@@ -154,9 +156,9 @@ describe('AnalysisPanel — análisis de encaje en el detalle de la oferta (HU-0
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Crea tu perfil' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/perfil');
-    const placeholder = screen.getByTestId('profile-placeholder');
-    expect(placeholder).toHaveTextContent('demo@jobpilot.dev');
-    expect(within(placeholder).getByRole('link', { name: 'Volver a tus ofertas' })).toHaveAttribute('href', '/');
+    // El onboarding de JP-FE-02: subir el CV o rellenar el perfil a mano.
+    expect(screen.getByTestId('cv-dropzone')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rellenar a mano' })).toBeInTheDocument();
   });
 
   it('si la IA no responde a tiempo (504) avisa, permite reintentar y conserva el análisis anterior', async () => {

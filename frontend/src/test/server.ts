@@ -1,4 +1,4 @@
 import { setupServer } from 'msw/node';
-import { applicationHandlers, handlers, offerHandlers } from './handlers';
+import { applicationHandlers, handlers, offerHandlers, profileHandlers } from './handlers';
 
-export const server = setupServer(...handlers, ...offerHandlers, ...applicationHandlers);
+export const server = setupServer(...handlers, ...offerHandlers, ...applicationHandlers, ...profileHandlers);

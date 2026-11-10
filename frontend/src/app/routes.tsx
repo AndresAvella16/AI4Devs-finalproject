@@ -2,7 +2,6 @@ import type { RouteObject } from 'react-router';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { OffersDashboardPage } from '../features/offers/OffersDashboardPage';
-import { ProfilePlaceholderPage } from '../features/profile/ProfilePlaceholderPage';
 import { GuestRoute } from './GuestRoute';
 import { Layout } from './Layout';
 import { NotFoundPage } from './NotFoundPage';
@@ -11,11 +10,11 @@ import { ProtectedRoute } from './ProtectedRoute';
 
 /**
  * Rutas de la SPA (en español). Las de cada funcionalidad se añaden como hijas de `protected`:
- * `/` dashboard de ofertas, `/ofertas/nueva` y `/ofertas/:offerId` (JP-FE-03/04); `/perfil` (provisional hasta el
- * onboarding de JP-FE-02); `/tablero` (JP-FE-06).
+ * `/` dashboard de ofertas, `/ofertas/nueva` y `/ofertas/:offerId` (JP-FE-03/04); `/perfil`, el onboarding y la edición
+ * del perfil (JP-FE-02); `/tablero` (JP-FE-06).
  *
  * Las páginas grandes se cargan con `lazy` de React Router (un chunk por página) para que el bundle inicial no pase de 500 kB:
- * el tablero (dnd-kit), el detalle de oferta (panel de análisis) y la nueva oferta.
+ * el tablero (dnd-kit), el detalle de oferta (panel de análisis), la nueva oferta y el perfil.
  */
 export const routes: RouteObject[] = [
   {
@@ -44,7 +43,11 @@ export const routes: RouteObject[] = [
             lazy: () =>
               import('../features/offers/OfferDetailPage').then(({ OfferDetailPage }) => ({ Component: OfferDetailPage })),
           },
-          { path: 'perfil', element: <ProfilePlaceholderPage /> },
+          {
+            path: 'perfil',
+            HydrateFallback: PageLoading,
+            lazy: () => import('../features/profile/ProfilePage').then(({ ProfilePage }) => ({ Component: ProfilePage })),
+          },
           {
             path: 'tablero',
             HydrateFallback: PageLoading,
