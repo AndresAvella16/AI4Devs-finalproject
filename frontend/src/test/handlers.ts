@@ -1,5 +1,12 @@
 import { http, HttpResponse } from 'msw';
 import type { AnalysisResponse } from '../api/analysis';
+import type {
+  ApplicationResponse,
+  ApplicationStatus,
+  ChangeStatusRequest,
+  CreateApplicationRequest,
+  UpdateApplicationRequest,
+} from '../api/applications';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '../api/auth';
 import type { OfferResponse, OfferSummary } from '../api/offers';
 
@@ -214,3 +221,199 @@ export const offerHandlers = [
     HttpResponse.json(exampleOffer(), { status: 201, headers: { Location: `/api/v1/offers/${EXAMPLE_OFFER_ID}` } }),
   ),
 ];
+
+// ---------------------------------------------------------------------------
+// Tablero (JP-FE-06): candidaturas en un almacén en memoria que imita al backend (renumera las columnas y sube la
+// `version` de las tarjetas que cambian), para comprobar que lo movido se mantiene al recargar.
+// ---------------------------------------------------------------------------
+
+/** "Hoy" en los tests del tablero (como el `Clock` del backend). */
+export const BOARD_TODAY = '2026-11-10';
+
+export function seedApplications(): ApplicationResponse[] {
+  return [
+    {
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      offerId: '55555555-0000-4000-8000-000000000003',
+      offerTitle: 'Desarrollador/a Frontend Senior (Angular)',
+      company: 'Consultora Tecnológica Muestra',
+      score: 42,
+      status: 'GUARDADA',
+      boardPosition: 0,
+      appliedAt: null,
+      followUpDate: null,
+      followUpOverdue: false,
+      notes: null,
+      version: 0,
+    },
+    {
+      id: 'aaaaaaaa-0000-4000-8000-000000000002',
+      offerId: '55555555-0000-4000-8000-000000000004',
+      offerTitle: 'Backend Developer Kotlin',
+      company: 'Startup Ficticia',
+      score: null,
+      status: 'GUARDADA',
+      boardPosition: 1,
+      appliedAt: null,
+      followUpDate: null,
+      followUpOverdue: false,
+      notes: null,
+      version: 2,
+    },
+    {
+      id: 'aaaaaaaa-0000-4000-8000-000000000003',
+      offerId: '55555555-0000-4000-8000-000000000002',
+      offerTitle: 'Desarrollador/a Full Stack',
+      company: 'Plataformas Digitales Ejemplo',
+      score: 68,
+      status: 'ENVIADA',
+      boardPosition: 0,
+      appliedAt: '2026-10-29',
+      followUpDate: '2026-11-05',
+      followUpOverdue: true,
+      notes: 'Escribir a la recruiter.',
+      version: 1,
+    },
+    {
+      id: 'aaaaaaaa-0000-4000-8000-000000000004',
+      offerId: '55555555-0000-4000-8000-000000000001',
+      offerTitle: 'Desarrollador/a Java Junior',
+      company: 'Innova Software Ficticio',
+      score: 85,
+      status: 'ENTREVISTA',
+      boardPosition: 0,
+      appliedAt: '2026-10-21',
+      followUpDate: '2026-11-20',
+      followUpOverdue: false,
+      notes: null,
+      version: 3,
+    },
+    {
+      id: 'aaaaaaaa-0000-4000-8000-000000000005',
+      offerId: '55555555-0000-4000-8000-000000000005',
+      offerTitle: null,
+      company: null,
+      score: null,
+      status: 'OFERTA',
+      boardPosition: 0,
+      appliedAt: '2026-09-01',
+      followUpDate: '2026-10-01',
+      followUpOverdue: false,
+      notes: null,
+      version: 4,
+    },
+  ];
+}
+
+let applicationStore: ApplicationResponse[] = seedApplications();
+
+/** Lo llama `setup.ts` después de cada test. */
+export function resetApplicationStore(cards: ApplicationResponse[] = seedApplications()): void {
+  applicationStore = cards.map((card) => ({ ...card }));
+}
+
+export function storedApplications(): ApplicationResponse[] {
+  return applicationStore.map((card) => ({ ...card }));
+}
+
+const BOARD_ORDER: ApplicationStatus[] = ['GUARDADA', 'ENVIADA', 'ENTREVISTA', 'OFERTA', 'DESCARTADA'];
+
+function storedBoard(): ApplicationResponse[] {
+  return [...applicationStore].sort(
+    (a, b) => BOARD_ORDER.indexOf(a.status) - BOARD_ORDER.indexOf(b.status) || a.boardPosition - b.boardPosition,
+  );
+}
+
+/** Como `BoardColumn.place` del backend: coloca la tarjeta en el índice pedido y renumera las columnas. */
+function storePlace(id: string, status: ApplicationStatus, index: number): void {
+  const moved = applicationStore.find((card) => card.id === id);
+  if (!moved) return;
+  const origin = moved.status;
+  const column = storedBoard().filter((card) => card.status === status && card.id !== id);
+  column.splice(Math.min(index, column.length), 0, moved);
+  moved.status = status;
+  const renumber = (cards: ApplicationResponse[]) =>
+    cards.forEach((card, position) => {
+      if (card.boardPosition !== position || card.id === id) card.version += 1;
+      card.boardPosition = position;
+    });
+  renumber(column);
+  if (origin !== status) renumber(storedBoard().filter((card) => card.status === origin));
+}
+
+export function applicationAlreadyExists() {
+  return problem(
+    409,
+    'application-already-exists',
+    'La oferta ya está en el tablero',
+    'Esta oferta ya tiene una candidatura en el tablero.',
+  );
+}
+
+function versionConflict() {
+  return problem(409, 'version-conflict', 'La candidatura ha cambiado', 'Otra pestaña ha modificado esta candidatura.');
+}
+
+export const applicationHandlers = [
+  http.get(`${API}/applications`, () => HttpResponse.json(storedBoard())),
+  // Como el backend: al final de GUARDADA, y 409 application-already-exists si la oferta ya tiene candidatura.
+  http.post(`${API}/applications`, async ({ request }) => {
+    const { offerId } = (await request.json()) as CreateApplicationRequest;
+    if (applicationStore.some((card) => card.offerId === offerId)) return applicationAlreadyExists();
+    const offer = offerId === EXAMPLE_OFFER_ID ? exampleOffer() : null;
+    const card: ApplicationResponse = {
+      id: `bbbbbbbb-0000-4000-8000-${String(applicationStore.length + 1).padStart(12, '0')}`,
+      offerId,
+      offerTitle: offer?.title ?? null,
+      company: offer?.company ?? null,
+      score: null,
+      status: 'GUARDADA',
+      boardPosition: applicationStore.filter((stored) => stored.status === 'GUARDADA').length,
+      appliedAt: null,
+      followUpDate: null,
+      followUpOverdue: false,
+      notes: null,
+      version: 0,
+    };
+    applicationStore.push(card);
+    return HttpResponse.json({ ...card }, { status: 201 });
+  }),
+  http.patch(`${API}/applications/:applicationId/status`, async ({ params, request }) => {
+    const body = (await request.json()) as ChangeStatusRequest;
+    const card = applicationStore.find((stored) => stored.id === params.applicationId);
+    if (!card) return problem(404, 'not-found', 'Recurso no encontrado', 'No existe la candidatura.');
+    if (card.version !== body.version) return versionConflict();
+    if (body.status === 'ENVIADA' && card.appliedAt === null) card.appliedAt = BOARD_TODAY;
+    storePlace(card.id, body.status, body.boardPosition);
+    return HttpResponse.json({ ...card });
+  }),
+  http.patch(`${API}/applications/:applicationId`, async ({ params, request }) => {
+    const body = (await request.json()) as UpdateApplicationRequest;
+    const card = applicationStore.find((stored) => stored.id === params.applicationId);
+    if (!card) return problem(404, 'not-found', 'Recurso no encontrado', 'No existe la candidatura.');
+    if (card.version !== body.version) return versionConflict();
+    if (body.notes !== undefined) card.notes = body.notes;
+    if (body.appliedAt !== undefined) card.appliedAt = body.appliedAt;
+    if (body.followUpDate !== undefined) {
+      card.followUpDate = body.followUpDate;
+      card.followUpOverdue = body.followUpDate !== null && body.followUpDate < BOARD_TODAY;
+    }
+    if (body.boardPosition !== undefined) storePlace(card.id, card.status, body.boardPosition);
+    else card.version += 1;
+    return HttpResponse.json({ ...card });
+  }),
+];
+
+/** La candidatura n.º `n` (1–5) de {@link seedApplications}: 1 Angular y 2 Kotlin (Guardada), 3 Full Stack (Enviada), 4 Java (Entrevista), 5 sin título (Oferta). */
+export function seedApplication(n: 1 | 2 | 3 | 4 | 5): ApplicationResponse {
+  const card = seedApplications()[n - 1];
+  if (!card) throw new Error(`No hay candidatura ${n} en el seed`);
+  return card;
+}
+
+/** El elemento `index` de una lista que el test sabe que existe (falla con un mensaje claro si no). */
+export function nth<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`No hay elemento ${index} (la lista tiene ${items.length})`);
+  return item;
+}

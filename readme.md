@@ -128,7 +128,7 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 | F3 | Análisis de encaje | ✅ Operativa de extremo a extremo | JP-BE-06, JP-FE-04 |
 | F1 | Perfil a partir del CV | ⏳ Entrega 3 (la Entrega 2 usa el perfil de los datos de prueba) | JP-BE-04, JP-FE-02 |
 | F4 | Carta y CV adaptados | ⏳ Entrega 3 | JP-BE-07, JP-FE-05 |
-| F5 | Tablero de candidaturas | 🔧 API operativa (JP-BE-08); el kanban del frontend queda para la Entrega 3 (el dashboard ya muestra el estado de cada candidatura) | JP-BE-08, JP-FE-06 |
+| F5 | Tablero de candidaturas | ✅ Operativa de extremo a extremo: "Guardar en el tablero" en el detalle de oferta (o "Ver en el tablero" si ya está) y kanban en `/tablero` con arrastre por ratón y teclado y pestañas con "Mover a…" en móvil | JP-BE-08, JP-FE-06 |
 
 **Flujo operativo:** navegador → React (nginx) → API Spring Boot → PostgreSQL, con la IA detrás del puerto `LlmGateway`.
 
@@ -136,7 +136,7 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 
 ### **1.3. Diseño y experiencia de usuario:**
 
-> Capturas de la Entrega 2 (modo `fake`, usuario de prueba `demo@jobpilot.dev`), salvo las dos últimas, hechas con la IA real (`LLM_MODE=real`). El vídeo del recorrido completo se añadirá en la Entrega 3.
+> Capturas con el usuario de prueba `demo@jobpilot.dev`, en modo `fake`, salvo las de la "Prueba con la IA real" (`LLM_MODE=real`). Las 01–07 son de la Entrega 2 y la del tablero, de JP-FE-06. El vídeo del recorrido completo se añadirá en la Entrega 3.
 
 **Inicio tras el login**
 
@@ -168,6 +168,10 @@ Análisis de esa oferta: puntuación 32 calculada por `MatchScoreCalculator` a p
 
 ![Prueba con la IA real: análisis de encaje](docs/screenshots/07-ia-real-analisis.png)
 
+**Tablero de candidaturas (JP-FE-06)**: 5 columnas con su contador. Cada tarjeta lleva el puesto, la empresa, la puntuación, la fecha de seguimiento y el aviso "Seguimiento pendiente" si está vencida. Las tarjetas se arrastran con el ratón o, desde el asa ⠿, con el teclado. En Enviada está la oferta de la prueba con la IA real, guardada desde su detalle con "Guardar en el tablero".
+
+![Tablero de candidaturas](docs/screenshots/08-tablero.png)
+
 **Flujo principal de usuario**
 
 ```mermaid
@@ -186,7 +190,7 @@ flowchart LR
     K --> L[Kanban de candidaturas]
 ```
 
-**Pantallas del producto** (implementadas en la Entrega 2: login/registro, dashboard, nueva oferta y detalle con el panel de análisis; el resto, en la Entrega 3)
+**Pantallas del producto** (implementadas en la Entrega 2: login/registro, dashboard, nueva oferta y detalle con el panel de análisis; el tablero, con JP-FE-06; el resto, en la Entrega 3)
 
 | Pantalla | Contenido principal |
 |---|---|
@@ -535,7 +539,7 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 | Backend: unitarios | JUnit 5, AssertJ, Mockito | 214 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores y límites de peticiones. |
 | Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 176 | Migraciones y restricciones de la BD, auth/JWT, ofertas, análisis, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
 | Cobertura | JaCoCo | 100 % de líneas en `analysis.domain` | Regla `check` (≥ 90 %) en `mvnw verify`, como pide la definición de hecho de JP-BE-06. |
-| Frontend | Vitest, React Testing Library, MSW | 130 | Cliente API, sesión, formularios, dashboard, detalle y panel de análisis. |
+| Frontend | Vitest, React Testing Library, MSW | 194 | Cliente API, sesión, formularios, dashboard, detalle, panel de análisis y tablero: `canTransition`, helpers del tablero, schema del panel lateral, "Guardar en el tablero" (`SaveToBoard.test.tsx`, también con un 409) y `KanbanBoard.test.tsx`. Este último mueve tarjetas con el `KeyboardSensor` real de dnd-kit sobre un layout simulado, comprueba que una transición prohibida se bloquea sin llamar al backend y falla si hay errores o avisos en la consola. |
 | Stack completo | `scripts/smoke-test.sh` contra `docker-compose.e2e.yml` | Smoke test HTTP | Health, nginx (fallback de la SPA, CSP, proxy `/api`), login y comprobación de que el JS no lleva una URL absoluta de la API. |
 | CI | GitHub Actions | 3 jobs | `backend` y `frontend` en paralelo; `e2e` (smoke test) si los dos pasan. |
 
@@ -592,7 +596,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
 - **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. Si molesta, JP-QA-01 puede mover el stack E2E a otros puertos (el smoke test ya los lee de `FRONTEND_URL` y `BACKEND_URL`).
 - **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; para desplegar en Render habrá que parametrizarlo (ver 2.4).
-- **El bundle del frontend pasa de 500 kB (JP-FE-04).** `npm run build` avisa de que el JS minificado supera los 500 kB (unos 505 kB, 155 kB con gzip) porque toda la SPA va en un único chunk. Se resolverá separando por rutas con `React.lazy` + `import()` (o `lazy` en las rutas de React Router), de modo que el tablero y el editor de documentos se carguen al abrirlos.
+- **El bundle inicial del frontend está justo por debajo de 500 kB (JP-FE-04 → JP-FE-06).** Antes era un único chunk de 504,6 kB (155,1 kB con gzip) y `npm run build` avisaba. Desde JP-FE-06, el tablero, el detalle de oferta y la nueva oferta se cargan con `lazy` de React Router, cada uno con un `HydrateFallback`. El chunk inicial queda en 494,4 kB (153,6 kB con gzip) y el tablero en 62,5 kB (20,7 kB con gzip, con dnd-kit). El margen es pequeño: casi todo el chunk inicial son React, React Router, TanStack Query, React Hook Form y Zod, que usan el login y el dashboard. Si una página nueva vuelve a disparar el aviso (p. ej. el editor de documentos de JP-FE-05), hay que cargarla también con `lazy` o separar las dependencias comunes en su propio chunk (`build.rolldownOptions.output`).
 
 ---
 
@@ -1851,9 +1855,10 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
    - `KanbanColumn`: título, contador de tarjetas y lista ordenable (`SortableContext`).
    - `ApplicationCard`: puesto, empresa, `MatchScoreBadge`, fecha de seguimiento e indicador "Seguimiento pendiente" si `followUpOverdue`.
    - `ApplicationDrawer`: panel lateral al hacer clic en una tarjeta, con notas, fecha de envío y fecha de seguimiento (React Hook Form + Zod) → `PATCH /applications/{id}`.
-3. **Reglas en cliente:** un helper `canTransition(from, to)` replica la política del backend para resaltar las columnas no válidas mientras se arrastra. El backend sigue siendo quien decide; si responde 409, se deshace el movimiento.
+3. **Reglas en cliente:** un helper `canTransition(from, to)` replica la política del backend para resaltar las columnas no válidas mientras se arrastra. Si se suelta una tarjeta en una de ellas, no se llama al backend: la tarjeta vuelve a su sitio y un *toast* explica por qué. Si aun así el backend responde 409 (p. ej. un estado desfasado), se deshace el movimiento.
 4. **Estados de la UI:** *skeleton* mientras carga, estado vacío ("Aún no tienes candidaturas — importa una oferta") con enlace al formulario, y error con botón de reintentar.
 5. **Responsive:** en pantallas de menos de 768 px las columnas pasan a pestañas y el cambio de estado se hace con un menú "Mover a…".
+6. **Guardar en el tablero:** en el detalle de la oferta, el botón "Guardar en el tablero" (`POST /applications`), también para ofertas PENDIENTE o FALLIDA. Si la oferta ya tiene candidatura (se busca en `GET /applications`), se muestra el enlace "Ver en el tablero". Tras guardar se muestra un *toast* y se recargan el tablero y la oferta. Un 409 `application-already-exists` se trata como guardada.
 
 **Criterios de aceptación**
 
@@ -1872,6 +1877,8 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 - Cubierto también por el E2E del flujo principal (JP-QA-01): arrastrar a "Enviada" y comprobar que se mantiene.
 
 **Definición de hecho:** componentes tipados sin `any`, tests en verde, lint sin errores, revisado en móvil y escritorio, PR aprobado.
+
+**Revisión manual (hecha el 10/11/2026, con `docker compose up --build`):** ✅ guardar en el tablero desde el detalle · ✅ arrastrar con el ratón y que el cambio se mantenga tras F5 · ✅ movimiento prohibido bloqueado sin ninguna petición en Network · ✅ reordenar con `PATCH /applications/{id}` · ✅ mover solo con el teclado · ✅ panel lateral · ✅ vista móvil con pestañas y "Mover a…" · ✅ Lighthouse Accessibility ≥ 90. Captura en 1.3.
 
 ---
 

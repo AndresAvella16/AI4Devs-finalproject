@@ -1,6 +1,11 @@
-import { Link, Outlet } from 'react-router';
+import { Link, NavLink, Outlet } from 'react-router';
 import { Button } from '../components/Button';
 import { useAuth } from '../features/auth/useAuth';
+
+const NAV_LINKS = [
+  { to: '/', label: 'Ofertas', testId: 'nav-offers', end: true },
+  { to: '/tablero', label: 'Tablero', testId: 'nav-board', end: false },
+] as const;
 
 export function Layout() {
   const { session, signOut } = useAuth();
@@ -21,6 +26,25 @@ export function Layout() {
           >
             JobPilot
           </Link>
+          {session && (
+            <nav aria-label="Principal" className="mr-auto flex items-center gap-1">
+              {NAV_LINKS.map(({ to, label, testId, end }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  data-testid={testId}
+                  className={({ isActive }) =>
+                    `rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                      isActive ? 'bg-indigo-50 text-indigo-800' : 'text-slate-700 hover:bg-slate-100'
+                    }`
+                  }
+                >
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+          )}
           {session && (
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-700" data-testid="current-user-name">
