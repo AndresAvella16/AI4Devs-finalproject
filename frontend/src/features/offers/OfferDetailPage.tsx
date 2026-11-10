@@ -5,14 +5,15 @@ import { Alert } from '../../components/Alert';
 import { AnalysisPanel } from '../analysis/AnalysisPanel';
 import { Button } from '../../components/Button';
 import { toGeneralError } from '../../components/serverErrors';
+import { SaveToBoard } from '../tracker/SaveToBoard';
 import { CATEGORY_LABELS, formatDate, formatSalary, UNTITLED_OFFER, WORK_MODE_LABELS } from './labels';
 import { useOffer, useRetryExtraction } from './useOffers';
 
 const backLink = 'text-sm font-medium text-indigo-700 underline-offset-2 hover:underline';
 
 /**
- * Detalle de una oferta (`/ofertas/:offerId`): cabecera, requisitos agrupados y panel de análisis de encaje
- * (JP-FE-04) si la extracción está COMPLETADA; si no, el reintento de la extracción.
+ * Detalle de una oferta (`/ofertas/:offerId`): cabecera con "Guardar en el tablero" (JP-FE-06), requisitos agrupados
+ * y panel de análisis de encaje (JP-FE-04) si la extracción está COMPLETADA; si no, el reintento de la extracción.
  */
 export function OfferDetailPage() {
   const { offerId = '' } = useParams();
@@ -67,9 +68,12 @@ function OfferDetail({ offer }: { offer: OfferResponse }) {
       </div>
 
       <header data-testid="offer-header" className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 data-testid="offer-title" className="text-2xl font-bold text-slate-900">
-          {offer.title ?? UNTITLED_OFFER}
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 data-testid="offer-title" className="text-2xl font-bold text-slate-900">
+            {offer.title ?? UNTITLED_OFFER}
+          </h1>
+          <SaveToBoard offerId={offer.id} />
+        </div>
         {completed && (
           <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <Detail term="Empresa" value={offer.company ?? 'Empresa no indicada'} />
