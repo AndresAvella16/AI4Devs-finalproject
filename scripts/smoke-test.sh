@@ -9,7 +9,8 @@
 #   DEMO_LOGIN=1 ./scripts/smoke-test.sh          # además, login con el usuario demo (solo perfil dev)
 #
 # Variables: FRONTEND_URL (http://localhost:5173), BACKEND_URL (http://localhost:8080), DEMO_LOGIN (0).
-# JP-QA-01 sustituirá este script por la suite de Playwright en el job e2e de la CI.
+# En la CI se ejecuta antes de la suite de Playwright (e2e/, JP-QA-01): comprueba lo que Playwright no mira
+# (cabeceras de seguridad y CSP de nginx, fallback de la SPA, URL de la API en el JS).
 
 set -euo pipefail
 

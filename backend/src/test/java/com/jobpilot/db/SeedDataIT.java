@@ -165,6 +165,13 @@ class SeedDataIT {
                 .orElseThrow();
     }
 
+    /** JP-QA-01: el seed de E2E (db/e2e-seed) no se carga en dev. */
+    @Test
+    void noCargaElSeedDeE2e() {
+        assertThat(count("SELECT count(*) FROM users WHERE email = ?", "e2e@jobpilot.test")).isZero();
+        assertThat(count("SELECT count(*) FROM flyway_schema_history WHERE script LIKE ?", "%e2e_data%")).isZero();
+    }
+
     private int count(String sql, Object... args) {
         return jdbc.queryForObject(sql, Integer.class, args);
     }

@@ -75,6 +75,7 @@ export function SortableApplicationCard({ application, index, onOpen }: Sortable
     <li
       ref={setNodeRef}
       data-testid="application-card"
+      data-offer-id={application.offerId}
       data-status={application.status}
       data-index={index}
       style={{ transform: CSS.Translate.toString(transform), transition }}

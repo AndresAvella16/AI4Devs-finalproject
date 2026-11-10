@@ -299,9 +299,13 @@ cd backend && ./mvnw verify -Pllm-live     # solo a mano: validación con el LLM
 # E2E: stack aislado (proyecto jobpilot-e2e, perfil e2e, LLM_MODE=fake fijo, BD vacía en cada arranque).
 # Usa los puertos 5173 y 8080: para antes el stack de desarrollo (docker compose stop backend frontend).
 docker compose -f docker-compose.e2e.yml up -d --build --wait
-bash scripts/smoke-test.sh                 # smoke test HTTP; JP-QA-01 añadirá: cd e2e && ./mvnw test (Playwright)
+bash scripts/smoke-test.sh                 # smoke test HTTP (nginx, CSP, login)
+cd e2e && ./mvnw test                      # Playwright: flujo principal (JP-QA-01). En Windows: .\mvnw.cmd test
+cd e2e && ./mvnw test -Dheadless=false -DslowMo=600   # con el navegador visible y más lento (p. ej. para grabar un vídeo)
 docker compose -f docker-compose.e2e.yml down
 ```
+
+Por defecto, Playwright va sin ventana y sin pausas. `-Dheadless=false` abre Chromium y `-DslowMo=<ms>` hace una pausa después de cada acción (clic, escritura, recarga, cada `mouse.move`…; los pasos intermedios de un mismo `mouse.move` no llevan pausa, así que el arrastre se ve fluido). Medido en local: la suite pasa de ~32 s a ~38 s con 600 ms; para un vídeo más pausado, sube el valor (p. ej. 1200). Las esperas máximas crecen con el `slowMo`, así que no fallan por ir despacio. Las mismas opciones se pueden dar con las variables de entorno `E2E_HEADLESS` y `E2E_SLOW_MO`. En PowerShell, cada `-D` va entre comillas: `.\mvnw.cmd test "-Dheadless=false" "-DslowMo=600"`.
 
 La CI (`.github/workflows/ci.yml`) ejecuta lo mismo en cada push y PR (ver 2.4).
 
@@ -496,7 +500,7 @@ flowchart LR
 ```
 
 - `backend` y `frontend` se ejecutan en paralelo; `e2e` solo si los dos pasan. El deploy aún no existe (Entrega 3).
-- El job `e2e` genera en cada ejecución credenciales de un solo uso (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET`), comprueba que `docker-compose.e2e.yml` fija `LLM_MODE=fake` aunque el entorno diga `real`, levanta el stack con `--wait` y ejecuta `scripts/smoke-test.sh`. JP-QA-01 añadirá la suite de Playwright.
+- El job `e2e` genera en cada ejecución credenciales de un solo uso (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET`), comprueba que `docker-compose.e2e.yml` fija `LLM_MODE=fake` aunque el entorno diga `real`, levanta el stack con `--wait`, ejecuta `scripts/smoke-test.sh` y después la suite de Playwright (`e2e/`, JP-QA-01): instala Chromium con sus dependencias (`./mvnw exec:java -Dexec.args="install --with-deps chromium"`) y ejecuta `./mvnw test`. Si falla, sube como artefacto las trazas de Playwright y las capturas (`e2e/target/e2e-artifacts/`).
 - La CI no usa secretos del repositorio ni llama a la API de Anthropic.
 - Imágenes: `backend/Dockerfile` (Maven → `eclipse-temurin:21-jre`, usuario sin privilegios, *healthcheck* con `curl` contra `/actuator/health`; si la imagen base dejara de traer `curl`, se instala al construir) y `frontend/Dockerfile` (Node 22 → `nginx:1.28-alpine`; `nginx.conf` sirve la SPA, reenvía `/api/` al backend y añade las cabeceras de seguridad de 2.5).
 
@@ -532,20 +536,21 @@ flowchart LR
 
 La estrategia sigue la pirámide de tests y la recomendación del máster para sistemas con LLM: **los componentes que rodean al modelo se prueban de forma determinista con respuestas simuladas**, y las salidas reales del modelo se validan por estructura y reglas, no comparando el texto exacto.
 
-**Estado de la suite al cerrar la Entrega 2**
+**Estado de la suite** (recuentos actualizados en JP-QA-01)
 
 | Capa | Herramientas | Tests | Notas |
 |---|---|---|---|
-| Backend: unitarios | JUnit 5, AssertJ, Mockito | 214 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores y límites de peticiones. |
-| Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 176 | Migraciones y restricciones de la BD, auth/JWT, ofertas, análisis, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
+| Backend: unitarios | JUnit 5, AssertJ, Mockito | 295 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores y límites de peticiones. |
+| Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 212 | Migraciones y restricciones de la BD, auth/JWT, ofertas, análisis, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
 | Cobertura | JaCoCo | 100 % de líneas en `analysis.domain` | Regla `check` (≥ 90 %) en `mvnw verify`, como pide la definición de hecho de JP-BE-06. |
-| Frontend | Vitest, React Testing Library, MSW | 194 | Cliente API, sesión, formularios, dashboard, detalle, panel de análisis y tablero: `canTransition`, helpers del tablero, schema del panel lateral, "Guardar en el tablero" (`SaveToBoard.test.tsx`, también con un 409) y `KanbanBoard.test.tsx`. Este último mueve tarjetas con el `KeyboardSensor` real de dnd-kit sobre un layout simulado, comprueba que una transición prohibida se bloquea sin llamar al backend y falla si hay errores o avisos en la consola. |
+| Frontend | Vitest, React Testing Library, MSW | 195 | Cliente API, sesión, formularios, dashboard, detalle, panel de análisis y tablero: `canTransition`, helpers del tablero, schema del panel lateral, "Guardar en el tablero" (`SaveToBoard.test.tsx`, también con un 409) y `KanbanBoard.test.tsx`. Este último mueve tarjetas con el `KeyboardSensor` real de dnd-kit sobre un layout simulado, comprueba que una transición prohibida se bloquea sin llamar al backend y falla si hay errores o avisos en la consola. |
 | Stack completo | `scripts/smoke-test.sh` contra `docker-compose.e2e.yml` | Smoke test HTTP | Health, nginx (fallback de la SPA, CSP, proxy `/api`), login y comprobación de que el JS no lleva una URL absoluta de la API. |
-| CI | GitHub Actions | 3 jobs | `backend` y `frontend` en paralelo; `e2e` (smoke test) si los dos pasan. |
+| E2E (JP-QA-01) | Playwright for Java + JUnit (`e2e/`) contra `docker-compose.e2e.yml` | 2 | Flujo principal con lo que hay implementado (ver abajo) y registro. ~26 s en local, con el stack ya levantado (6 ejecuciones seguidas sobre el mismo stack, todas en verde). |
+| CI | GitHub Actions | 3 jobs | `backend` y `frontend` en paralelo; `e2e` (smoke test + Playwright) si los dos pasan. |
 
 Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil `dev` o Docker Compose). Detectó problemas que los tests automáticos no veían: un `.env` mal formado, una URL de la API absoluta que la CSP bloqueaba, la IP del cliente falsificable a través de nginx y un error de validación de la URL que no se mostraba.
 
-**Previsto para la Entrega 3:** E2E con Playwright del flujo principal (JP-QA-01) y tests del perfil (`CvTextExtractorTest`). Los tests del tablero en el backend (`ApplicationStatusPolicyTest`, `BoardColumnTest`, `ApplicationServiceTest`, `ApplicationControllerIT`) ya están hechos (JP-BE-08). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
+**Previsto para la Entrega 3:** tests del perfil (`CvTextExtractorTest`) y completar el E2E con la subida del CV y los documentos. El E2E con Playwright del flujo principal ya está hecho (JP-QA-01), con los pasos que existen hoy. Los tests del tablero en el backend (`ApplicationStatusPolicyTest`, `BoardColumnTest`, `ApplicationServiceTest`, `ApplicationControllerIT`) ya están hechos (JP-BE-08). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
 
 **Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
 
@@ -567,6 +572,11 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 **E2E (Playwright for Java contra `docker-compose.e2e.yml` con `LLM_MODE=fake`)**
 
 - **Flujo principal:** registro → subir el CV de ejemplo → revisar el perfil → pegar una oferta de ejemplo → comprobar que se ven los requisitos y la puntuación esperada → generar la carta → exportar el PDF (se verifica la descarga) → guardar en el tablero → arrastrar la tarjeta a "Enviada" → recargar la página y comprobar que se ha guardado.
+- **Implementado en JP-QA-01** (`MainFlowE2ETest`): login con el usuario del seed de E2E → pegar la oferta → 3 requisitos obligatorios y 3 deseables → calcular el encaje (85, con 6 filas) → "Guardar en el tablero" → la tarjeta aparece en "Guardada" → arrastrarla con el ratón a "Enviada" (se espera la respuesta del `PATCH /status`) → recargar → sigue en "Enviada". `RegistrationE2ETest` prueba el registro de una cuenta nueva. **Pendiente**, marcado con `TODO` en el test: subir el CV y revisar el perfil (JP-BE-04 / JP-FE-02) y generar la carta y exportar el PDF (JP-BE-07 / JP-FE-05).
+- **Seed de E2E** (`db/e2e-seed/R__e2e_data.sql`, solo perfil `e2e`): usuario `e2e@jobpilot.test` / `Demo1234!` con perfil y sin ofertas, porque un usuario recién registrado no puede analizar ofertas hasta que exista la subida del CV (`409 profile-required`). Está fuera de `db/seed/` porque Flyway busca también en las subcarpetas y el perfil `dev` lo cargaría. Lo cubre `E2eSeedIT`, y `SeedDataIT` comprueba que `dev` no lo carga.
+- **Repetible sobre el mismo stack:** cada ejecución importa su propia oferta y localiza su tarjeta por `data-offer-id`; el registro usa un email aleatorio. El perfil `e2e` sube el cupo de IA por usuario a 10.000/h: cada ejecución gasta 2 llamadas del usuario del seed y con 30/h la 16.ª ejecución en una hora daría `429`. El límite de login (10/min) no se toca: la suite hace un login por ejecución y tarda ~26 s.
+- **Sin esperas fijas:** solo el auto-wait de Playwright, `assertThat(...)` y `waitForResponse`. El arrastre no usa `dragTo()`: el `PointerSensor` de dnd-kit no empieza hasta mover el puntero 5 px con el botón pulsado, así que se hace `mouse.down` → `mouse.move` en varios pasos → `mouse.up`, desde el asa ⠿ de la tarjeta.
+- **Opciones** (propiedad `-D` de Maven o variable de entorno): `frontendUrl` / `FRONTEND_URL` (por defecto `http://localhost:5173`), `headless` / `E2E_HEADLESS` (`true`) y `slowMo` / `E2E_SLOW_MO` (ms, `0`). Ver 1.4. Si un test falla, su traza (`npx playwright show-trace <zip>`) y una captura quedan en `e2e/target/e2e-artifacts/`.
 
 **Validación con el LLM real (manual / *smoke*, fuera de la CI)**
 
@@ -594,7 +604,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 - **Límites de peticiones en memoria (JP-BE-05).** Los cubos de Bucket4j viven en la memoria del backend: valen para una sola instancia (el despliegue previsto) y se reinician al reiniciarlo. Con varias instancias habría que pasarlos a un almacén compartido (Bucket4j tiene integración con Redis o PostgreSQL). Para acotar la memoria, al llegar a `jobpilot.rate-limit.max-keys` claves se olvidan las que tienen el cupo lleno.
 - **Proxies de confianza para `X-Forwarded-For` (JP-BE-05).** Tomcat da por internas las IPs privadas (10/8, 172.16/12, 192.168/16, 127/8…). En local, el puerto 8080 del backend también está publicado y las peticiones del host llegan desde la puerta de enlace de Docker (172.x), así que quien llame directamente a `:8080` puede falsear su IP. Por nginx (`:5173`) no, porque nginx sustituye la cabecera. Al desplegar en Render hay que ajustar `server.tomcat.remoteip.internal-proxies` al proxy de la plataforma y no publicar el backend.
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
-- **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. Si molesta, JP-QA-01 puede mover el stack E2E a otros puertos (el smoke test ya los lee de `FRONTEND_URL` y `BACKEND_URL`).
+- **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. En JP-QA-01 se decidió no cambiarlos: antes de los E2E hay que parar el stack de desarrollo (`docker compose stop backend frontend`). Si molesta, se pueden mover a otros puertos sin tocar los tests: el smoke test los lee de `FRONTEND_URL` y `BACKEND_URL`, y Playwright, de `FRONTEND_URL`.
 - **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; para desplegar en Render habrá que parametrizarlo (ver 2.4).
 - **El bundle inicial del frontend está justo por debajo de 500 kB (JP-FE-04 → JP-FE-06).** Antes era un único chunk de 504,6 kB (155,1 kB con gzip) y `npm run build` avisaba. Desde JP-FE-06, el tablero, el detalle de oferta y la nueva oferta se cargan con `lazy` de React Router, cada uno con un `HydrateFallback`. El chunk inicial queda en 494,4 kB (153,6 kB con gzip) y el tablero en 62,5 kB (20,7 kB con gzip, con dnd-kit). El margen es pequeño: casi todo el chunk inicial son React, React Router, TanStack Query, React Hook Form y Zod, que usan el login y el dashboard. Si una página nueva vuelve a disparar el aviso (p. ej. el editor de documentos de JP-FE-05), hay que cargarla también con `lazy` o separar las dependencias comunes en su propio chunk (`build.rolldownOptions.output`).
 

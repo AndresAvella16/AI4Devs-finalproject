@@ -79,6 +79,7 @@ export function MobileBoard({ cards, onOpen }: MobileBoardProps) {
               <li
                 key={card.id}
                 data-testid="application-card"
+                data-offer-id={card.offerId}
                 className="flex rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
               >
                 <ApplicationCardBody application={card} onOpen={onOpen}>

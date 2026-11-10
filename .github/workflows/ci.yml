@@ -1,7 +1,7 @@
 # CI de JobPilot (JP-OPS-01, readme 2.4): en cada push y PR.
 #   backend  → ./mvnw verify (unitarios + integración con Testcontainers)
 #   frontend → npm ci · lint · test · build
-#   e2e      → stack de docker-compose.e2e.yml (LLM_MODE=fake) + smoke test. JP-QA-01 añadirá Playwright.
+#   e2e      → stack de docker-compose.e2e.yml (LLM_MODE=fake) + smoke test + Playwright (JP-QA-01)
 # Nunca llama a la API de Anthropic ni usa secretos del repositorio: las credenciales del E2E se generan aquí.
 
 name: CI
@@ -70,10 +70,10 @@ jobs:
       - run: npm run build
 
   e2e:
-    name: e2e (docker compose + smoke test)
+    name: e2e (docker compose + smoke test + Playwright)
     needs: [backend, frontend]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
@@ -103,6 +103,33 @@ jobs:
 
       - name: Smoke test
         run: bash scripts/smoke-test.sh
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: e2e/pom.xml
+
+      # "sh ./mvnw": no depende de que el bit de ejecución de e2e/mvnw esté guardado en Git (se creó en Windows).
+      - name: Instalar Chromium para Playwright
+        working-directory: e2e
+        run: sh ./mvnw -B -ntp exec:java -Dexec.args="install --with-deps chromium"
+
+      - name: E2E con Playwright
+        working-directory: e2e
+        run: sh ./mvnw -B -ntp test
+
+      - name: Trazas y capturas de Playwright
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-playwright
+          path: |
+            e2e/target/e2e-artifacts/
+            e2e/target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Logs del stack
         if: failure()
