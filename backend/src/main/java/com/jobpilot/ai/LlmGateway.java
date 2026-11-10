@@ -19,6 +19,13 @@ public interface LlmGateway {
     String modelName();
 
     /**
+     * Estructura el texto de un CV en un borrador de perfil (F1, JP-BE-04). El texto va al modelo como datos no
+     * confiables; la respuesta cumple {@link ProfileExtraction} y {@link ProfileExtractionValidator}. El borrador
+     * no se guarda: el usuario lo revisa y lo confirma con {@code PUT /profile}.
+     */
+    ProfileExtraction extractProfile(String cvText);
+
+    /**
      * Extrae los datos clave y los requisitos de una oferta (F2, JP-BE-05). El texto va al modelo como datos no
      * confiables; la respuesta cumple {@link OfferExtraction} y {@link OfferExtractionValidator}.
      */

@@ -5,7 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-/** Perfiles (JP-BE-06 solo lo lee; JP-BE-04 añadirá la escritura). Cada usuario tiene como mucho uno. */
+/** Perfiles. Cada usuario tiene como mucho uno ({@code uq_profiles_user_id}). */
 public interface ProfileRepository extends JpaRepository<Profile, UUID> {
 
     Optional<Profile> findByUserId(UUID userId);

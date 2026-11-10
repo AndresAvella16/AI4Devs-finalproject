@@ -22,6 +22,7 @@
         <springdoc.version>3.2.0</springdoc.version>
         <spring-ai.version>2.0.2</spring-ai.version>
         <bucket4j.version>8.14.0</bucket4j.version>
+        <pdfbox.version>3.0.8</pdfbox.version>
         <jacoco.version>0.8.14</jacoco.version>
     </properties>
 
@@ -77,6 +78,13 @@
             <groupId>com.bucket4j</groupId>
             <artifactId>bucket4j_jdk17-core</artifactId>
             <version>${bucket4j.version}</version>
+        </dependency>
+
+        <!-- Lectura del CV en PDF (JP-BE-04): solo la usa CvTextExtractor -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
 
         <!-- Persistencia -->

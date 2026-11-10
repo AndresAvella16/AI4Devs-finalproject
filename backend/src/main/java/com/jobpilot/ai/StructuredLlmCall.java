@@ -11,10 +11,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.converter.BeanOutputConverter;
 import tools.jackson.databind.DeserializationFeature;
@@ -27,7 +30,10 @@ import tools.jackson.databind.json.JsonMapper;
  *   <li>Prompt de sistema = reglas comunes + plantilla de la tarea + esquema JSON de la respuesta.</li>
  *   <li>Mensaje de usuario = solo los datos no confiables, cada bloque entre {@code <nombre>} y {@code </nombre>}.
  *       Nunca se renderizan como plantilla, y un cierre de bloque dentro de los datos se neutraliza.</li>
- *   <li>Sin herramientas ni opciones: el modelo no tiene acceso a nada.</li>
+ *   <li>Sin herramientas: el modelo no tiene acceso a nada. Las opciones son las del modelo
+ *       ({@code spring.ai.anthropic.chat.*}), salvo {@code maxTokens} si la llamada lo cambia: se parte de una
+ *       copia de las del modelo porque {@code AnthropicChatModel} no las combina por su cuenta (unas opciones
+ *       parciales perderían el modelo). No se envía {@code temperature}: el modelo actual la rechaza (400).</li>
  *   <li>La respuesta se convierte al {@code record} (sin campos desconocidos) y se valida con Bean Validation y
  *       con el {@link ResponseValidator} de la tarea. Si no es válida, <b>un reintento</b>; si vuelve a fallar,
  *       {@link LlmInvalidResponseException} (502).</li>
@@ -74,33 +80,52 @@ class StructuredLlmCall {
         List<String> problems = List.of();
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             long start = System.nanoTime();
-            String text = callModel(prompt);
-            Parsed<T> parsed = parse(text, converter, request);
+            ChatResponse response = callModel(prompt);
+            Parsed<T> parsed = parse(text(response), converter, request);
             long millis = (System.nanoTime() - start) / 1_000_000;
             if (parsed.problems().isEmpty()) {
-                log.debug("LLM '{}' respondió en {} ms (intento {}/{})", request.promptName(), millis, attempt,
-                        MAX_ATTEMPTS);
+                log.debug("LLM '{}' respondió en {} ms (intento {}/{}; {})", request.promptName(), millis, attempt,
+                        MAX_ATTEMPTS, usage(response));
                 return parsed.value();
             }
             problems = parsed.problems();
-            log.warn("Respuesta no válida del LLM para '{}' en {} ms (intento {}/{}): {}", request.promptName(),
-                    millis, attempt, MAX_ATTEMPTS, problems);
+            log.warn("Respuesta no válida del LLM para '{}' en {} ms (intento {}/{}; {}): {}", request.promptName(),
+                    millis, attempt, MAX_ATTEMPTS, usage(response), problems);
         }
         throw new LlmInvalidResponseException("Respuesta no válida del LLM para '" + request.promptName()
                 + "' tras " + MAX_ATTEMPTS + " intentos: " + problems);
     }
 
-    private String callModel(Prompt prompt) {
-        ChatResponse response;
+    private ChatResponse callModel(Prompt prompt) {
         try {
-            response = chatModel.call(prompt);
+            return chatModel.call(prompt);
         } catch (RuntimeException e) {
             throw translator.translate(e);
         }
+    }
+
+    private static String text(ChatResponse response) {
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
             return null;
         }
         return response.getResult().getOutput().getText();
+    }
+
+    /**
+     * Tokens de entrada y salida y motivo de parada, para vigilar el coste y {@code max-tokens}: una respuesta
+     * cortada por el límite acaba en {@code max_tokens} y no es un JSON válido. Solo metadatos, nunca el contenido.
+     */
+    private static String usage(ChatResponse response) {
+        if (response == null) {
+            return "sin respuesta";
+        }
+        Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
+        String finishReason = response.getResult() == null || response.getResult().getMetadata() == null
+                ? null
+                : response.getResult().getMetadata().getFinishReason();
+        return "tokens entrada=" + (usage == null ? "?" : usage.getPromptTokens())
+                + " salida=" + (usage == null ? "?" : usage.getCompletionTokens())
+                + " parada=" + (finishReason == null ? "?" : finishReason);
     }
 
     private <T> Parsed<T> parse(String text, BeanOutputConverter<T> converter, StructuredRequest<T> request) {
@@ -137,7 +162,16 @@ class StructuredLlmCall {
         String user = request.data().entrySet().stream()
                 .map(StructuredLlmCall::delimit)
                 .collect(Collectors.joining("\n\n"));
-        return new Prompt(List.of(new SystemMessage(system), new UserMessage(user)));
+        List<Message> messages = List.of(new SystemMessage(system), new UserMessage(user));
+        return request.hasOptions() ? new Prompt(messages, options(request)) : new Prompt(messages);
+    }
+
+    /** Las opciones del modelo con las de la llamada encima. */
+    private ChatOptions options(StructuredRequest<?> request) {
+        ChatOptions defaults = chatModel.getOptions();
+        ChatOptions.Builder<?> builder = defaults == null ? ChatOptions.builder() : defaults.mutate();
+        builder.maxTokens(request.maxTokens());
+        return builder.build();
     }
 
     /** {@code <nombre>\n...\n</nombre>}, sin permitir que los datos cierren el bloque antes de tiempo. */

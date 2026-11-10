@@ -8,6 +8,9 @@ import java.util.Objects;
  */
 public class ConflictException extends RuntimeException {
 
+    /** Slug de {@link #profileConcurrentUpdate()}. */
+    public static final String PROFILE_CONCURRENT_UPDATE = "profile-concurrent-update";
+
     private final String typeSlug;
     private final String title;
 
@@ -24,6 +27,17 @@ public class ConflictException extends RuntimeException {
     public static ConflictException versionConflict() {
         return new ConflictException("version-conflict", "La candidatura ha cambiado",
                 "La candidatura se ha modificado desde que la cargaste. Recarga el tablero e inténtalo de nuevo.");
+    }
+
+    /**
+     * Dos {@code PUT /profile} a la vez: la otra petición ha creado o reemplazado el perfil mientras se guardaba
+     * este, y la base de datos ha rechazado la escritura (un perfil por usuario, habilidades únicas).
+     */
+    public static ConflictException profileConcurrentUpdate() {
+        return new ConflictException(PROFILE_CONCURRENT_UPDATE,
+                "El perfil se ha guardado a la vez desde otra petición",
+                "Tu perfil se ha guardado al mismo tiempo desde otra pestaña o petición. Recárgalo y vuelve a guardar "
+                        + "los cambios.");
     }
 
     public String getTypeSlug() {

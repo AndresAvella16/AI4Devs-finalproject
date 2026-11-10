@@ -126,7 +126,7 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 | — | Registro e inicio de sesión (JWT) | ✅ Operativa | JP-BE-02, JP-FE-01 |
 | F2 | Importar oferta | ✅ Operativa de extremo a extremo | JP-BE-05, JP-FE-03 |
 | F3 | Análisis de encaje | ✅ Operativa de extremo a extremo | JP-BE-06, JP-FE-04 |
-| F1 | Perfil a partir del CV | ⏳ Entrega 3 (la Entrega 2 usa el perfil de los datos de prueba) | JP-BE-04, JP-FE-02 |
+| F1 | Perfil a partir del CV | 🟡 API operativa (JP-BE-04: subida del CV, borrador con IA y guardado del perfil); falta el onboarding del frontend (JP-FE-02), así que la app sigue usando el perfil de los datos de prueba | JP-BE-04, JP-FE-02 |
 | F4 | Carta y CV adaptados | ⏳ Entrega 3 | JP-BE-07, JP-FE-05 |
 | F5 | Tablero de candidaturas | ✅ Operativa de extremo a extremo: "Guardar en el tablero" en el detalle de oferta (o "Ver en el tablero" si ya está) y kanban en `/tablero` con arrastre por ratón y teclado y pestañas con "Mover a…" en móvil | JP-BE-08, JP-FE-06 |
 
@@ -277,6 +277,22 @@ npm run dev
 
 El frontend llama siempre a la ruta relativa `/api/v1`. En desarrollo, el servidor de Vite (http://localhost:5173) reenvía `/api` al backend en `http://localhost:8080` (`server.proxy` en `frontend/vite.config.ts`), así que el navegador no hace peticiones de otro origen y no interviene CORS. En producción, nginx hace lo mismo.
 
+#### Usar la IA real (`LLM_MODE=real`)
+
+Por defecto la app usa respuestas fijas (`LLM_MODE=fake`). Para que llame a Claude, **cambia el `.env`**: es lo que manda, tanto en Docker Compose como con `mvnw spring-boot:run -Dspring-boot.run.profiles=dev`.
+
+```dotenv
+LLM_MODE=real
+ANTHROPIC_API_KEY=<tu clave>      # solo en .env, que está en .gitignore
+ANTHROPIC_MODEL=                  # vacío = claude-sonnet-5-5
+```
+
+Después reinicia el backend: `docker compose up -d backend` (recrea el contenedor con el `.env` nuevo) o vuelve a lanzar `mvnw spring-boot:run`. Cuando termines, vuelve a poner `LLM_MODE=fake`.
+
+- **No uses el perfil de Spring `llm-live` para arrancar la app.** Solo existe en el classpath de test y es para `LlmLiveIT` (`-Pllm-live`, ver 2.6). Aunque se active, el `LLM_MODE=fake` del `.env` gana a su `llm.mode: real` y la app sigue en modo fake sin avisar (comprobado en JP-BE-04).
+- **Cómo comprobar que es la IA real:** con el perfil `dev`, cada llamada deja en el log una línea como `LLM 'cv-extraction' respondió en 9613 ms (intento 1/2; tokens entrada=3083 salida=1594 parada=end_turn)`. En modo fake no aparece, y las respuestas son siempre las mismas (la oferta del Ejemplo 1 y el perfil de los datos de prueba) y tardan milisegundos.
+- Si `LLM_MODE=real` y falta la clave, la app no arranca (`LlmModeEnvironmentPostProcessor`). Con el perfil `e2e`, `real` no se admite.
+
 #### Migraciones y datos de prueba (seed)
 
 - Las migraciones están en `backend/src/main/resources/db/migration` (Flyway) y se aplican automáticamente al arrancar.
@@ -408,7 +424,7 @@ flowchart LR
 | **Módulo `analysis`** | `LlmGateway` + `MatchScoreCalculator` | El LLM clasifica cada requisito; `MatchScoreCalculator` (Java puro, sin dependencias) calcula la puntuación. |
 | **Módulo `document`** | `LlmGateway`, CommonMark, OpenHTMLtoPDF | Genera la carta y el CV adaptado en Markdown, versiona los cambios y exporta a PDF. |
 | **Módulo `tracker`** | Spring Data JPA | Candidaturas, reglas de transición de estado (`ApplicationStatusPolicy`) e historial de cambios. |
-| **Módulo `ai`** | Spring AI (`ChatModel` + `BeanOutputConverter`) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st` (con las reglas comunes en `_system-base.st`), conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. `LLM_MODE` (`fake` por defecto, o `real`) elige el adaptador; en `real`, sin `ANTHROPIC_API_KEY` la app no arranca. Con el perfil `e2e`, `real` no se admite: la app no arranca aunque haya API key. |
+| **Módulo `ai`** | Spring AI (`ChatModel` + `BeanOutputConverter`) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st` (con las reglas comunes en `_system-base.st`), conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. `LLM_MODE` (`fake` por defecto, o `real`) elige el adaptador; en `real`, sin `ANTHROPIC_API_KEY` la app no arranca. Con el perfil `e2e`, `real` no se admite: la app no arranca aunque haya API key. Cada llamada puede cambiar `maxTokens` sobre la configuración general (`spring.ai.anthropic.chat.*`, 4.096 tokens): la extracción del CV usa 8.192, para que un CV largo no se corte; ofertas y análisis usan la general. No se envía `temperature`: `claude-sonnet-5-5` la rechaza con un 400 (*"`temperature` is deprecated for this model"*, comprobado en JP-BE-04). |
 | **Persistencia** | PostgreSQL 16, Spring Data JPA (Hibernate), Flyway | Modelo relacional, migraciones versionadas y datos de prueba. |
 | **Tests** | JUnit 5, Mockito, AssertJ, Testcontainers, MockMvc, Vitest, React Testing Library, MSW, Playwright for Java | Ver sección 2.6. |
 | **CI** | GitHub Actions | Build, tests y lint en cada push y PR. |
@@ -437,7 +453,7 @@ AI4Devs-finalproject/
 │       │       ├── application.yml  # + application-dev.yml, application-e2e.yml, application-prod.yml
 │       │       ├── db/migration/    # V1__init_schema.sql, V2__...
 │       │       ├── db/seed/         # R__demo_data.sql (solo perfil dev)
-│       │       ├── prompts/         # _system-base.st, extract-cv.st, extract-offer.st, match.st, cover-letter.st
+│       │       ├── prompts/         # _system-base.st, cv-extraction.st, offer-extraction.st, match.st, cover-letter.st
 │       │       └── fake-llm/        # respuestas fijas del modo fake (JSON), usadas en dev, tests y E2E
 │       └── test/
 │           ├── java/com/jobpilot/   # unitarios (*Test) e integración (*IT)
@@ -521,7 +537,7 @@ flowchart LR
 | **Autenticación sin estado** | JWT firmado con HS256, caducidad de 60 min y secreto de al menos 256 bits leído de una variable de entorno. Se envía en la cabecera `Authorization: Bearer …`. |
 | **Autorización por propietario** | Todas las consultas filtran por el `userId` del token (`findByIdAndUserId`). Si un recurso pertenece a otro usuario se responde `404` (no `403`) para no revelar que existe. Hay tests de integración específicos para esto. |
 | **Validación de entrada** | DTOs con Bean Validation (`@NotBlank`, `@Size`, `@Email`…). Ejemplo: el texto de una oferta debe tener entre 200 y 20.000 caracteres. El frontend valida también con Zod, pero la validación del backend es la que manda. |
-| **Subida de ficheros** | Solo se aceptan PDF de hasta 5 MB; se comprueba el tipo MIME y la firma `%PDF`. El fichero no se guarda en disco: se extrae su texto y se descarta. |
+| **Subida de ficheros** | Solo se aceptan PDF de hasta 5 MB y 10 páginas; se comprueba el tipo MIME y la firma `%PDF`. El fichero no se guarda en disco (ni siquiera en temporales: multipart y PDFBox trabajan en memoria): se extrae su texto y se descarta. Todo se comprueba antes de llamar a la IA, así que un fichero rechazado no gasta cupo. El texto extraído (máx. 50.000 caracteres) espera en memoria 30 minutos a que el usuario confirme el perfil con `PUT /profile`, y solo entonces se guarda en `cv_raw_text` (JP-BE-04). |
 | **Mitigación de *prompt injection*** | El texto del CV y de la oferta se envía delimitado y marcado como *datos* en el prompt de sistema. El modelo no tiene herramientas ni acceso a nada. Su respuesta se valida contra un esquema estricto antes de usarla, y la puntuación la calcula Java, no el modelo. |
 | **Sin SSRF** | El backend nunca descarga la URL que introduce el usuario; solo la guarda como texto. |
 | **Límite de peticiones** | Única fuente de verdad de los límites de uso (IA y login). Por usuario: 30 peticiones por hora a los endpoints que llaman al LLM, con Bucket4j; si se supera, `429` con `Retry-After`. Global: un `Semaphore` permite como máximo 3 llamadas simultáneas al LLM; si no hay hueco, `503` con `Retry-After`. Esto protege del abuso, controla el coste y evita agotar los hilos del servidor. **Login:** máximo 10 intentos por minuto por IP + email en `POST /auth/login` (cuentan todos, correctos o no, y se comprueba antes de la contraseña), también con Bucket4j; si se supera, `429` con `Retry-After`, para frenar los ataques de fuerza bruta. Los cubos se recargan de forma progresiva (30/h = una petición cada 2 min), las peticiones que no pasan la validación (400) o que no llegan a la IA (404, 409) no gastan cupo, y el 429 es `rate-limit-exceeded`. La IP del cliente la da Tomcat (`server.forward-headers-strategy: native`): solo acepta `X-Forwarded-For` si la petición llega desde un proxy interno (nginx en la red de Docker), y nginx sustituye esa cabecera en lugar de añadir a la que mande el cliente (JP-BE-05). |
@@ -540,8 +556,8 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 
 | Capa | Herramientas | Tests | Notas |
 |---|---|---|---|
-| Backend: unitarios | JUnit 5, AssertJ, Mockito | 295 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores y límites de peticiones. |
-| Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 212 | Migraciones y restricciones de la BD, auth/JWT, ofertas, análisis, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
+| Backend: unitarios | JUnit 5, AssertJ, Mockito | 380 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores, límites de peticiones y el perfil (`CvTextExtractorTest` con PDFs generados en el test, `CvDraftStoreTest`, `CvExtractionParserTest`, `ProfileServiceTest`) y `AnthropicRequestOptionsTest`, que construye la petición con el `AnthropicChatModel` real (sin red) para comprobar que las opciones por llamada llegan a Anthropic. |
+| Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 255 | Migraciones y restricciones de la BD, auth/JWT, perfil, ofertas, análisis, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
 | Cobertura | JaCoCo | 100 % de líneas en `analysis.domain` | Regla `check` (≥ 90 %) en `mvnw verify`, como pide la definición de hecho de JP-BE-06. |
 | Frontend | Vitest, React Testing Library, MSW | 195 | Cliente API, sesión, formularios, dashboard, detalle, panel de análisis y tablero: `canTransition`, helpers del tablero, schema del panel lateral, "Guardar en el tablero" (`SaveToBoard.test.tsx`, también con un 409) y `KanbanBoard.test.tsx`. Este último mueve tarjetas con el `KeyboardSensor` real de dnd-kit sobre un layout simulado, comprueba que una transición prohibida se bloquea sin llamar al backend y falla si hay errores o avisos en la consola. |
 | Stack completo | `scripts/smoke-test.sh` contra `docker-compose.e2e.yml` | Smoke test HTTP | Health, nginx (fallback de la SPA, CSP, proxy `/api`), login y comprobación de que el JS no lleva una URL absoluta de la API. |
@@ -550,7 +566,7 @@ La estrategia sigue la pirámide de tests y la recomendación del máster para s
 
 Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil `dev` o Docker Compose). Detectó problemas que los tests automáticos no veían: un `.env` mal formado, una URL de la API absoluta que la CSP bloqueaba, la IP del cliente falsificable a través de nginx y un error de validación de la URL que no se mostraba.
 
-**Previsto para la Entrega 3:** tests del perfil (`CvTextExtractorTest`) y completar el E2E con la subida del CV y los documentos. El E2E con Playwright del flujo principal ya está hecho (JP-QA-01), con los pasos que existen hoy. Los tests del tablero en el backend (`ApplicationStatusPolicyTest`, `BoardColumnTest`, `ApplicationServiceTest`, `ApplicationControllerIT`) ya están hechos (JP-BE-08). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
+**Previsto para la Entrega 3:** completar el E2E con la subida del CV y los documentos. Los tests del perfil en el backend (`CvTextExtractorTest`, `ProfileControllerIT`) ya están hechos (JP-BE-04). El E2E con Playwright del flujo principal ya está hecho (JP-QA-01), con los pasos que existen hoy. Los tests del tablero en el backend (`ApplicationStatusPolicyTest`, `BoardColumnTest`, `ApplicationServiceTest`, `ApplicationControllerIT`) ya están hechos (JP-BE-08). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
 
 **Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
 
@@ -565,6 +581,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 - Las migraciones de Flyway se aplican sobre un PostgreSQL 16 real y se validan las restricciones (unicidad, `CHECK`, borrado en cascada).
 - `OfferControllerIT`: `POST /offers` con `FakeLlmGateway` → 201, oferta y requisitos guardados; el LLM falla → 201 con `extractionStatus: FALLIDA` y el texto guardado; `POST /offers/{id}/extraction` sobre una oferta FALLIDA → 200 con requisitos nuevos, y sobre una COMPLETADA → 409; texto demasiado corto → 400; sin token → 401.
 - `LlmErrorMappingIT`: timeout del LLM → 504; concurrencia agotada → 503 con `Retry-After`; respuesta no válida dos veces → 502.
+- `ProfileControllerIT` (JP-BE-04): subir un CV → 200 con el borrador y sin crear el perfil; no es PDF → 415, más de 5 MB, vacío o más de 10 páginas → 400, escaneado → 422, sin llamar a la IA ni gastar cupo; fallos de la IA → 502/503/504; un CV con instrucciones incrustadas → borrador válido; `PUT /profile` → 201 y después 200 (conserva el id, el CV y los análisis), con y sin borrador; validaciones → 400; carrera del primer `PUT` → 409. `CvDraftExpiryIT`: con el borrador caducado el perfil se guarda sin CV.
 - `AnalysisControllerIT`: análisis de punta a punta API → servicio → BD con una puntuación esperada exacta; usuario sin perfil → 409.
 - `OwnershipIT`: el usuario A no puede leer, analizar ni mover recursos del usuario B (→ 404).
 - `ApplicationControllerIT`: crear candidatura → 201 en GUARDADA con historial `from = NULL`, y crearla de nuevo para la misma oferta → 409; cambio de estado válido → 200 y se registra en el historial; mismo estado en `PATCH /status` → 400; transición no permitida → 409; `PATCH /applications/{id}` con una `version` antigua → 409.
@@ -593,7 +610,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
   cd backend; .\mvnw.cmd verify -Pllm-live
   ```
 
-  El perfil Maven `llm-live` solo ejecuta ese grupo, y salta los unitarios y JaCoCo. Necesita Docker para el PostgreSQL de Testcontainers. La clave se lee de `ANTHROPIC_API_KEY`: de una variable de entorno o, si no está, del `.env` de la raíz (perfil de Spring `llm-live`, con `spring.config.import`, como el perfil `dev`). Así no hay que escribirla en la terminal ni queda en el historial. Si no hay clave, los tests aparecen como saltados y el build no falla. El modelo es el de `ANTHROPIC_MODEL` o, si está vacío, `claude-sonnet-5-5`.
+  El perfil Maven `llm-live` solo ejecuta ese grupo, y salta los unitarios y JaCoCo. Necesita Docker para el PostgreSQL de Testcontainers. La clave se lee de `ANTHROPIC_API_KEY`: de una variable de entorno o, si no está, del `.env` de la raíz (perfil de Spring `llm-live`, con `spring.config.import`, como el perfil `dev`). Así no hay que escribirla en la terminal ni queda en el historial. El test fuerza `llm.mode=real` (`@SpringBootTest(properties = ...)`), así que funciona aunque el `.env` diga `LLM_MODE=fake`; para usar la IA real en la app, ver "Usar la IA real" en 1.4. Si no hay clave, los tests aparecen como saltados y el build no falla. El modelo es el de `ANTHROPIC_MODEL` o, si está vacío, `claude-sonnet-5-5`.
 
 **Deuda técnica conocida**
 
@@ -602,6 +619,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 - **La sesión no se sincroniza entre pestañas (JP-FE-01).** El frontend no escucha el evento `storage`: si se cierra la sesión en una pestaña, las demás siguen mostrando la sesión hasta que su siguiente llamada a la API recibe un `401` (o hasta que llega `expiresAt`), y entonces vuelven a `/login`.
 - **Aviso moderado de `npm audit` en `minimatch` (JP-FE-01).** Llega como dependencia de typescript-eslint, que solo se usa al pasar el lint: no forma parte del bundle que se sirve al navegador. `npm audit fix --force` lo resolvería rebajando typescript-eslint a una versión antigua, así que se deja hasta que typescript-eslint actualice la dependencia.
 - **Límites de peticiones en memoria (JP-BE-05).** Los cubos de Bucket4j viven en la memoria del backend: valen para una sola instancia (el despliegue previsto) y se reinician al reiniciarlo. Con varias instancias habría que pasarlos a un almacén compartido (Bucket4j tiene integración con Redis o PostgreSQL). Para acotar la memoria, al llegar a `jobpilot.rate-limit.max-keys` claves se olvidan las que tienen el cupo lleno.
+- **Borrador del CV en memoria (JP-BE-04).** El texto de un CV subido con `POST /profile/cv` espera en la memoria del backend (`CvDraftStore`, 30 min, como mucho `jobpilot.cv-draft.max-entries` borradores) hasta el `PUT /profile`. Como los cubos de Bucket4j, vale para una sola instancia y se pierde al reiniciar; si se pierde o caduca, el perfil se guarda igualmente, sin `cv_raw_text` ni `cv_file_name`. Con varias instancias habría que pasarlo a una tabla o a Redis.
 - **Proxies de confianza para `X-Forwarded-For` (JP-BE-05).** Tomcat da por internas las IPs privadas (10/8, 172.16/12, 192.168/16, 127/8…). En local, el puerto 8080 del backend también está publicado y las peticiones del host llegan desde la puerta de enlace de Docker (172.x), así que quien llame directamente a `:8080` puede falsear su IP. Por nginx (`:5173`) no, porque nginx sustituye la cabecera. Al desplegar en Render hay que ajustar `server.tomcat.remoteip.internal-proxies` al proxy de la plataforma y no publicar el backend.
 - **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
 - **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. En JP-QA-01 se decidió no cambiarlos: antes de los E2E hay que parar el stack de desarrollo (`docker compose stop backend frontend`). Si molesta, se pueden mover a otros puertos sin tocar los tests: el smoke test los lee de `FRONTEND_URL` y `BACKEND_URL`, y Playwright, de `FRONTEND_URL`.
@@ -781,7 +799,7 @@ Relaciones: 1–0..1 con `profiles`; 1–N con `job_offers` y `applications`.
 | languages | JSONB | NOT NULL DEFAULT '[]', CHECK (jsonb_typeof(languages) = 'array') | `[{"language":"Inglés","level":"B2"}]`. |
 | education | JSONB | NOT NULL DEFAULT '[]', CHECK (jsonb_typeof(education) = 'array') | `[{"title":"DAW","institution":"…","year":2024}]`. |
 | cv_file_name | VARCHAR(255) | | Nombre del PDF original. |
-| cv_raw_text | TEXT | | Texto extraído; se usa como contexto para el LLM. |
+| cv_raw_text | TEXT | | Texto extraído del PDF. Se guarda al confirmar el perfil con `PUT /profile` (no al subir el CV) y se conserva al reemplazarlo; se usa como contexto para el LLM. |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL | |
 
 Idiomas y formación se guardan en JSONB porque solo se muestran y se envían como contexto al LLM, nunca se consultan por separado. Las habilidades y experiencias, en cambio, tienen tabla propia por la unicidad sin distinguir mayúsculas de las habilidades, el `CHECK` del nivel y el orden de las experiencias. La base de datos solo garantiza que el JSONB es un array; la forma de cada elemento la valida la aplicación (records Java con Bean Validation, mapeados con `@JdbcTypeCode(SqlTypes.JSON)`). Si algún día hiciera falta filtrar por idioma o nivel en SQL, se normalizarían a tabla propia.
@@ -969,19 +987,22 @@ Los schemas citados están definidos en `components.schemas` del YAML de abajo.
 
 | Estado | `slug` | `title` | Cuándo |
 |---|---|---|---|
-| 400 | `validation-error` | Datos de entrada no válidos | Falla Bean Validation; incluye `errors: [{field, message}]` |
+| 400 | `validation-error` | Datos de entrada no válidos | Falla Bean Validation; incluye `errors: [{field, message}]`. También el CV de `POST /profile/cv` que falta, está vacío, pesa más de 5 MB, tiene más de 10 páginas o más de 50.000 caracteres de texto (en el campo `file`) |
 | 400 | `malformed-request` | Petición mal formada | El cuerpo no es un JSON válido o no tiene el formato esperado |
 | 401 | `unauthorized` | No autenticado | Falta el token, no es válido o ha caducado; con la cabecera `WWW-Authenticate: Bearer` |
 | 401 | `invalid-credentials` | Credenciales incorrectas | Login con email o contraseña incorrectos; misma respuesta exista o no el email |
 | 404 | `not-found` | Recurso no encontrado | El recurso no existe o es de otro usuario |
 | 409 | `email-already-registered` | Email ya registrado | Registro con un email que ya existe (sin distinguir mayúsculas) |
 | 409 | `offer-already-extracted` | La oferta ya tiene sus requisitos extraídos | `POST /offers/{offerId}/extraction` sobre una oferta COMPLETADA |
+| 409 | `profile-concurrent-update` | El perfil se ha guardado a la vez desde otra petición | `PUT /profile` que choca en la BD con otro `PUT` simultáneo del mismo usuario (p. ej. dos pestañas creando el perfil a la vez) |
 | 409 | `profile-required` | Necesitas crear tu perfil | `POST /offers/{offerId}/analysis` de un usuario que aún no tiene perfil (el frontend lo lleva a crearlo) |
 | 409 | `offer-not-extracted` | La oferta no tiene requisitos extraídos | `POST /offers/{offerId}/analysis` sobre una oferta PENDIENTE o FALLIDA, o sin requisitos |
 | 409 | `application-already-exists` | La oferta ya está en el tablero | `POST /applications` de una oferta que ya tiene candidatura |
 | 409 | `invalid-status-transition` | Transición de estado no permitida | `PATCH /applications/{applicationId}/status` que no cumple las reglas de transición de la HU-05; el `detail` dice de qué estado a cuál |
 | 409 | `version-conflict` | La candidatura ha cambiado | `PATCH /applications/{applicationId}` o `/status` con una `version` que ya no es la guardada (bloqueo optimista) |
 | 409 | *(uno por caso)* | *(uno por caso)* | Otros conflictos de negocio que se añadan |
+| 415 | `invalid-cv-file` | Fichero no válido | `POST /profile/cv` con un fichero que no es un PDF legible: tipo MIME distinto de `application/pdf`, sin la firma `%PDF-`, corrupto o con contraseña de apertura. `detail`: "Solo se admiten PDF de hasta 5 MB." |
+| 422 | `cv-without-text` | El PDF no tiene texto | `POST /profile/cv` con un PDF del que no se extraen al menos 50 caracteres (p. ej. escaneado); el frontend sugiere subir un PDF con texto o rellenar el perfil a mano |
 | 429 | `rate-limit-exceeded` | Demasiadas peticiones | Límite de IA por usuario o de intentos de login superado (ver 2.5), con la cabecera `Retry-After` (segundos) |
 | 500 | `internal-error` | Error interno | Error no controlado (la traza solo va al log) |
 | 502 | `llm-invalid-response` | Respuesta de la IA no válida | `LlmInvalidResponse` |
@@ -993,9 +1014,9 @@ Los errores estándar del framework que no son de dominio (405, 406, 415, 404 de
 | Método | Ruta | Cuerpo | Respuesta OK | Otros errores | Funcionalidad |
 |---|---|---|---|---|---|
 | POST | `/auth/register` · `/auth/login` (públicos) | `RegisterRequest` · `LoginRequest` | 201 / 200 `AuthResponse` | 400, 401 (login), 409 (email ya registrado), 429 (login: demasiados intentos, ver 2.5) | Autenticación |
-| POST | `/profile/cv` 🤖 | multipart (`file`, PDF ≤ 5 MB) | 200 `CvDraftResponse`. Guarda `cv_raw_text` y `cv_file_name` y devuelve el **borrador** del perfil, **sin guardarlo** | 400, 415 | F1 — Subir CV y obtener el borrador |
+| POST | `/profile/cv` 🤖 | multipart (`file`, PDF ≤ 5 MB y ≤ 10 páginas) | 200 `CvDraftResponse`: el **borrador** del perfil, **sin guardarlo**. El texto extraído y el nombre del fichero esperan en memoria 30 min y pasan a `cv_raw_text` y `cv_file_name` con el siguiente `PUT /profile` | 400, 415 `invalid-cv-file`, 422 `cv-without-text` (ninguno llega a la IA ni gasta cupo) | F1 — Subir CV y obtener el borrador |
 | GET | `/profile` | — | 200 `ProfileResponse` | 404 (aún no hay perfil) | F1 — Consultar el perfil |
-| PUT | `/profile` | `ProfileRequest` | **201** la primera vez (crea el perfil, sirve también para el perfil hecho a mano) · **200** después (lo reemplaza) | 400 | F1 — Guardar el perfil revisado |
+| PUT | `/profile` | `ProfileRequest` | **201** la primera vez (crea el perfil, sirve también para el perfil hecho a mano) · **200** después (lo reemplaza entero y conserva su id, sus análisis y su CV). Añade el CV subido en los últimos 30 min, si lo hay; sin él (o caducado) se guarda igual, sin error | 400 (también habilidades repetidas sin distinguir mayúsculas o `endDate` anterior a `startDate`), 409 `profile-concurrent-update` | F1 — Guardar el perfil revisado |
 | POST | `/offers` ⭐ | `CreateOfferRequest` | **201** `OfferResponse` + `Location` siempre que el texto sea válido. Si la IA falla, la oferta se guarda con `extractionStatus: FALLIDA` | 400, 429 (la oferta no se guarda) | **F2 — Importar oferta** |
 | POST | `/offers/{offerId}/extraction` 🤖 | — | 200 `OfferResponse`. Reintenta la extracción de una oferta PENDIENTE o FALLIDA y borra los requisitos y análisis anteriores en una sola transacción. Si la IA vuelve a fallar, queda FALLIDA | 404, 409 `offer-already-extracted` (la oferta ya está COMPLETADA) | F2 — Reintentar la extracción |
 | GET | `/offers` | — | 200 `OfferSummary[]` (incluye `latestScore`, `hasBlockingGap` y `applicationStatus`) | — | F2 — Dashboard |
@@ -1292,7 +1313,7 @@ components:
       properties:
         name: { type: string, maxLength: 80 }
         level: { type: string, nullable: true, enum: [BASICO, INTERMEDIO, AVANZADO] }
-        years: { type: integer, minimum: 0, nullable: true }
+        years: { type: integer, minimum: 0, maximum: 60, nullable: true }
 
     Experience:
       type: object
@@ -1301,37 +1322,44 @@ components:
         company: { type: string, maxLength: 120 }
         role: { type: string, maxLength: 120 }
         startDate: { type: string, format: date }
-        endDate: { type: string, format: date, nullable: true, description: null = puesto actual }
-        description: { type: string, nullable: true }
+        endDate: { type: string, format: date, nullable: true, description: 'null = puesto actual; nunca anterior a startDate' }
+        description: { type: string, maxLength: 4000, nullable: true }
 
     ProfileRequest:
       type: object
-      description: Perfil completo que se guarda con PUT /profile (reemplaza el anterior)
+      description: Perfil completo que se guarda con PUT /profile (reemplaza el anterior). Todos los campos son opcionales; una lista que no se envía equivale a una vacía
       properties:
         headline: { type: string, maxLength: 160, nullable: true }
-        summary: { type: string, nullable: true }
+        summary: { type: string, maxLength: 4000, nullable: true }
         yearsExperience: { type: integer, minimum: 0, maximum: 60, nullable: true }
         location: { type: string, maxLength: 120, nullable: true }
         languages:
           type: array
+          maxItems: 20
           items:
             type: object
+            required: [language, level]
             properties:
-              language: { type: string }
-              level: { type: string, example: B2 }
+              language: { type: string, maxLength: 60 }
+              level: { type: string, maxLength: 40, example: B2 }
         education:
           type: array
+          maxItems: 20
           items:
             type: object
+            required: [title]
             properties:
-              title: { type: string }
-              institution: { type: string, nullable: true }
+              title: { type: string, maxLength: 160 }
+              institution: { type: string, maxLength: 160, nullable: true }
               year: { type: integer, nullable: true }
         skills:
           type: array
+          maxItems: 100
+          description: Sin nombres repetidos (no se distinguen mayúsculas)
           items: { $ref: '#/components/schemas/Skill' }
         experiences:
           type: array
+          maxItems: 50
           description: El orden del array es el orden en que se muestran
           items: { $ref: '#/components/schemas/Experience' }
 
@@ -1348,7 +1376,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/ProfileRequest'
         - type: object
-          description: Borrador extraído por la IA. No se guarda como perfil hasta que el usuario lo confirma con PUT /profile.
+          description: Borrador extraído por la IA. No se guarda como perfil hasta que el usuario lo confirma con PUT /profile. Las habilidades repetidas que devuelva la IA ya vienen quitadas.
           properties:
             cvFileName: { type: string }
 

@@ -204,6 +204,42 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void invalidCvFileException_devuelve415ConSuTipo() throws Exception {
+        mockMvc.perform(get("/test/invalid-cv-file"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value(PROBLEMS + "invalid-cv-file"))
+                .andExpect(jsonPath("$.title").value("Fichero no válido"))
+                .andExpect(jsonPath("$.status").value(415))
+                .andExpect(jsonPath("$.detail").value("Solo se admiten PDF de hasta 5 MB."))
+                .andExpect(jsonPath("$.instance").value("/test/invalid-cv-file"));
+    }
+
+    @Test
+    void cvWithoutTextException_devuelve422ConSuTipo() throws Exception {
+        mockMvc.perform(get("/test/cv-without-text"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value(PROBLEMS + "cv-without-text"))
+                .andExpect(jsonPath("$.title").value("El PDF no tiene texto"))
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.detail").isNotEmpty())
+                .andExpect(jsonPath("$.instance").value("/test/cv-without-text"));
+    }
+
+    @Test
+    void ficheroDemasiadoGrande_devuelve400DeValidacionEnElCampoFile() throws Exception {
+        mockMvc.perform(get("/test/upload-too-large"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value(PROBLEMS + "validation-error"))
+                .andExpect(jsonPath("$.errors", hasSize(1)))
+                .andExpect(jsonPath("$.errors[0].field").value("file"))
+                .andExpect(jsonPath("$.errors[0].message").value("Solo se admiten PDF de hasta 5 MB."))
+                .andExpect(jsonPath("$.instance").value("/test/upload-too-large"));
+    }
+
+    @Test
     void llmOverloadedException_rechazaUnRetryAfterNoPositivo() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> new LlmOverloadedException(0))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -255,6 +291,21 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/llm-overloaded")
         String llmOverloaded() {
             throw new LlmOverloadedException(30);
+        }
+
+        @GetMapping("/test/invalid-cv-file")
+        String invalidCvFile() {
+            throw new InvalidCvFileException();
+        }
+
+        @GetMapping("/test/cv-without-text")
+        String cvWithoutText() {
+            throw new CvWithoutTextException();
+        }
+
+        @GetMapping("/test/upload-too-large")
+        String uploadTooLarge() {
+            throw new org.springframework.web.multipart.MaxUploadSizeExceededException(5 * 1024 * 1024);
         }
 
         @GetMapping("/test/boom")

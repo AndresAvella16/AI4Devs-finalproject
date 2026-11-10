@@ -16,6 +16,11 @@ spring:
       ddl-auto: validate          # el esquema solo lo cambia Flyway
   mvc:
     log-request-details: false    # nunca registrar cuerpos ni parámetros: hay CVs con datos personales
+  servlet:
+    multipart:                    # CV en PDF (JP-BE-04): más de 5 MB → 400 validation-error en file
+      max-file-size: 5MB
+      max-request-size: 6MB       # el fichero más las cabeceras de la parte multipart
+      file-size-threshold: 6MB    # por debajo se queda en memoria: el CV nunca se escribe en disco
   ai:
     # spring.ai.model.chat lo fija LlmModeEnvironmentPostProcessor a partir de llm.mode: no se configura aquí.
     anthropic:
@@ -70,6 +75,10 @@ jobpilot:
       capacity: 10
       period: 1m
     max-keys: 10000         # al llegar aquí se olvidan las claves con el cupo lleno (memoria acotada)
+  # Texto del CV subido con POST /profile/cv hasta que el usuario guarda el perfil con PUT /profile (JP-BE-04).
+  cv-draft:
+    ttl: 30m
+    max-entries: 1000       # memoria acotada: como mucho ~50.000 caracteres por borrador
 
 springdoc:
   api-docs:

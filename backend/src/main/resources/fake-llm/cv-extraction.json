@@ -1,0 +1,29 @@
+{
+  "headline": "Desarrolladora Web Junior · Java",
+  "summary": "Desarrolladora Java con experiencia en APIs REST con Spring Boot y PostgreSQL. React en proyectos personales.",
+  "yearsExperience": 2,
+  "location": "Valencia",
+  "skills": [
+    { "name": "Java", "level": "AVANZADO", "years": 2 },
+    { "name": "Spring Boot", "level": "INTERMEDIO", "years": 2 },
+    { "name": "PostgreSQL", "level": "INTERMEDIO", "years": 1 },
+    { "name": "Git", "level": "INTERMEDIO", "years": 2 },
+    { "name": "React", "level": "BASICO", "years": 1 }
+  ],
+  "experiences": [
+    {
+      "company": "Tecnologías Turia S.L.",
+      "role": "Desarrolladora Junior",
+      "startDate": "2025-03-01",
+      "endDate": null,
+      "description": "APIs REST con Java 21 y Spring Boot sobre PostgreSQL. Tests con JUnit."
+    }
+  ],
+  "education": [
+    { "title": "CFGS Desarrollo de Aplicaciones Web (DAW)", "institution": "IES Ficticio de Valencia", "year": 2024 }
+  ],
+  "languages": [
+    { "language": "Español", "level": "Nativo" },
+    { "language": "Inglés", "level": "B2" }
+  ]
+}
