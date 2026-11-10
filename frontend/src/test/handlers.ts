@@ -9,6 +9,7 @@ import type {
 } from '../api/applications';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '../api/auth';
 import type { OfferResponse, OfferSummary } from '../api/offers';
+import type { CvDraftResponse, ProfileRequest, ProfileResponse } from '../api/profile';
 
 /** Prefijo de las rutas de la API en los tests (el cliente usa la ruta relativa /api/v1). */
 export const API = '*/api/v1';
@@ -417,3 +418,96 @@ export function nth<T>(items: readonly T[], index: number): T {
   if (item === undefined) throw new Error(`No hay elemento ${index} (la lista tiene ${items.length})`);
   return item;
 }
+
+// ---------------------------------------------------------------------------
+// Perfil (JP-FE-02): el borrador de `fake-llm/cv-extraction.json` y el perfil guardado del usuario demo.
+// ---------------------------------------------------------------------------
+
+export const CV_FILE_NAME = 'cv-ficticio.pdf';
+
+/** Lo que devuelve `POST /profile/cv` con el LLM fake (`backend/src/main/resources/fake-llm/cv-extraction.json`). */
+export function exampleCvDraft(overrides: Partial<CvDraftResponse> = {}): CvDraftResponse {
+  return {
+    headline: 'Desarrolladora Web Junior · Java',
+    summary:
+      'Desarrolladora Java con experiencia en APIs REST con Spring Boot y PostgreSQL. React en proyectos personales.',
+    yearsExperience: 2,
+    location: 'Valencia',
+    skills: [
+      { name: 'Java', level: 'AVANZADO', years: 2 },
+      { name: 'Spring Boot', level: 'INTERMEDIO', years: 2 },
+      { name: 'PostgreSQL', level: 'INTERMEDIO', years: 1 },
+      { name: 'Git', level: 'INTERMEDIO', years: 2 },
+      { name: 'React', level: 'BASICO', years: 1 },
+    ],
+    experiences: [
+      {
+        company: 'Tecnologías Turia S.L.',
+        role: 'Desarrolladora Junior',
+        startDate: '2025-03-01',
+        endDate: null,
+        description: 'APIs REST con Java 21 y Spring Boot sobre PostgreSQL. Tests con JUnit.',
+      },
+    ],
+    education: [
+      { title: 'CFGS Desarrollo de Aplicaciones Web (DAW)', institution: 'IES Ficticio de Valencia', year: 2024 },
+    ],
+    languages: [
+      { language: 'Español', level: 'Nativo' },
+      { language: 'Inglés', level: 'B2' },
+    ],
+    cvFileName: CV_FILE_NAME,
+    ...overrides,
+  };
+}
+
+/** Perfil ya guardado (como el del seed del usuario demo). */
+export function demoProfile(overrides: Partial<ProfileResponse> = {}): ProfileResponse {
+  return {
+    id: '3c9d2e1f-0000-4000-8000-000000000001',
+    headline: 'Desarrolladora Java · Backend',
+    summary: 'Perfil guardado del usuario demo.',
+    yearsExperience: 3,
+    location: 'Madrid',
+    skills: [
+      { name: 'Java', level: 'AVANZADO', years: 3 },
+      { name: 'Docker', level: null, years: null },
+    ],
+    experiences: [
+      {
+        company: 'Empresa Demo S.A.',
+        role: 'Desarrolladora Backend',
+        startDate: '2023-01-15',
+        endDate: '2025-12-31',
+        description: null,
+      },
+    ],
+    education: [{ title: 'Grado en Ingeniería Informática', institution: null, year: null }],
+    languages: [{ language: 'Inglés', level: 'C1' }],
+    cvFileName: 'cv-demo.pdf',
+    updatedAt: '2026-11-01T09:00:00Z',
+    ...overrides,
+  };
+}
+
+/** `PUT /profile` como el backend: devuelve lo guardado (201 si `created`, 200 si no). */
+export function savedProfileResponse(body: ProfileRequest, created: boolean) {
+  return HttpResponse.json(
+    { ...body, id: demoProfile().id, cvFileName: created ? CV_FILE_NAME : 'cv-demo.pdf', updatedAt: '2026-11-10T10:00:00Z' },
+    { status: created ? 201 : 200 },
+  );
+}
+
+/** El usuario no tiene perfil: `GET /profile` → 404. */
+export function noProfile() {
+  return http.get(`${API}/profile`, () =>
+    problem(404, 'not-found', 'Recurso no encontrado', 'Todavía no has creado tu perfil.'),
+  );
+}
+
+/** Por defecto el usuario (demo) tiene perfil, como en el seed. */
+export const profileHandlers = [
+  http.get(`${API}/profile`, () => HttpResponse.json(demoProfile())),
+  http.post(`${API}/profile/cv`, () => HttpResponse.json(exampleCvDraft())),
+  http.put(`${API}/profile`, async ({ request }) => savedProfileResponse((await request.json()) as ProfileRequest, false)),
+];

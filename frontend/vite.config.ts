@@ -16,6 +16,17 @@ export default defineConfig({
       '/api': { target: backendUrl, changeOrigin: true },
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // React, React DOM y React Router van en su propio chunk (JP-FE-02): el inicial pasaba de 500 kB. Se descargan
+        // igual en la primera carga, pero cambian poco y el navegador los conserva en caché entre despliegues.
+        codeSplitting: {
+          groups: [{ name: 'vendor-react', test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/ }],
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

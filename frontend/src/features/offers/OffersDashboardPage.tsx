@@ -3,6 +3,7 @@ import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { toGeneralError } from '../../components/serverErrors';
 import { useAuth } from '../auth/useAuth';
+import { useProfile } from '../profile/useProfile';
 import { OfferListItem } from './OfferListItem';
 import { useOffers } from './useOffers';
 
@@ -13,6 +14,8 @@ const linkButton =
 export function OffersDashboardPage() {
   const { session } = useAuth();
   const offers = useOffers();
+  // Sin perfil no se puede calcular el encaje (409 profile-required): se invita a crearlo.
+  const profile = useProfile();
 
   return (
     <section className="flex flex-col gap-6">
@@ -27,6 +30,23 @@ export function OffersDashboardPage() {
           Nueva oferta
         </Link>
       </div>
+
+      {profile.data === null && (
+        <div
+          data-testid="profile-missing-cta"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 p-4"
+        >
+          <div>
+            <p className="font-semibold text-indigo-900">Crea tu perfil</p>
+            <p className="text-sm text-indigo-800">
+              Sube tu CV para que podamos calcular tu encaje con cada oferta.
+            </p>
+          </div>
+          <Link to="/perfil" className={linkButton}>
+            Crear mi perfil
+          </Link>
+        </div>
+      )}
 
       {offers.isPending ? (
         <div data-testid="offers-loading" aria-busy="true" className="flex flex-col gap-3">

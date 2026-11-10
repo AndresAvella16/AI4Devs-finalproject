@@ -5,12 +5,13 @@ import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { toGeneralError } from '../../components/serverErrors';
 import { formatDate } from '../offers/labels';
-import { formatWait, isBlocking } from './labels';
+import { formatWait } from '../../components/formatWait';
+import { isBlocking } from './labels';
 import { RequirementMatchTable } from './RequirementMatchTable';
 import { ScoreRing } from './ScoreRing';
 import { useCreateAnalysis, useLatestAnalysis } from './useAnalysis';
 
-/** Ruta a la que se lleva al usuario sin perfil (409 `profile-required`). JP-FE-02 la convierte en el onboarding. */
+/** Ruta a la que se lleva al usuario sin perfil (409 `profile-required`): el onboarding del perfil (JP-FE-02). */
 export const PROFILE_PATH = '/perfil';
 
 const HELP_ID = 'analysis-help';

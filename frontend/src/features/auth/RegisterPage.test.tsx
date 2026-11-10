@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import { http } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { loadSession } from '../../api/session';
-import { API, problem } from '../../test/handlers';
+import { API, noProfile, problem } from '../../test/handlers';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { server } from '../../test/server';
 
@@ -14,13 +14,15 @@ async function fillAndSubmit(user: ReturnType<typeof renderWithProviders>['user'
 }
 
 describe('RegisterPage', () => {
-  it('con datos válidos crea la cuenta, inicia sesión y lleva al inicio', async () => {
+  it('con datos válidos crea la cuenta, inicia sesión y lleva a crear el perfil (onboarding, JP-FE-02)', async () => {
+    server.use(noProfile());
     const { user, router } = renderWithProviders({ path: '/registro' });
 
     await fillAndSubmit(user);
 
     expect(await screen.findByTestId('current-user-name')).toHaveTextContent('Ana Pérez');
-    expect(router.state.location.pathname).toBe('/');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Crea tu perfil' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/perfil');
     expect(loadSession()?.user.email).toBe('ana@example.com');
   });
 

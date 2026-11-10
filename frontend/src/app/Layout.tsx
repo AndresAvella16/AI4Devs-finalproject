@@ -5,6 +5,7 @@ import { useAuth } from '../features/auth/useAuth';
 const NAV_LINKS = [
   { to: '/', label: 'Ofertas', testId: 'nav-offers', end: true },
   { to: '/tablero', label: 'Tablero', testId: 'nav-board', end: false },
+  { to: '/perfil', label: 'Perfil', testId: 'nav-profile', end: false },
 ] as const;
 
 export function Layout() {

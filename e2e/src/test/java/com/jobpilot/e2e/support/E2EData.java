@@ -1,11 +1,15 @@
 package com.jobpilot.e2e.support;
 
 /**
- * Datos de los E2E. El usuario lo crea el seed del perfil e2e
- * ({@code backend/src/main/resources/db/e2e-seed/R__e2e_data.sql}) con perfil ya hecho, porque aún no se puede
- * subir el CV (JP-BE-04 / JP-FE-02). Credenciales ficticias, solo para el stack E2E.
+ * Datos de los E2E. Desde JP-FE-02 los tests crean su propia cuenta (registro → subir el CV → guardar el perfil),
+ * así que ninguno usa ya el usuario del seed del perfil e2e
+ * ({@code backend/src/main/resources/db/e2e-seed/R__e2e_data.sql}). Se mantiene (con sus constantes) para probar a
+ * mano el stack E2E con un usuario que ya tiene perfil. Credenciales ficticias, solo para el stack E2E.
  */
 public final class E2EData {
+
+    /** Contraseña de las cuentas que crean los tests (cumple la política: letras y números, 8+). */
+    public static final String REGISTER_PASSWORD = "Registro1234";
 
     public static final String SEED_EMAIL = "e2e@jobpilot.test";
     public static final String SEED_PASSWORD = "Demo1234!";
@@ -25,6 +29,10 @@ public final class E2EData {
 
     /** Título y puntuación que da el LLM fake (fake-llm/offer-extraction.json y match-evaluation.json). */
     public static final String FAKE_OFFER_TITLE = "Desarrollador/a Java Junior";
+
+    /** Titular y número de habilidades del borrador que da el LLM fake para cualquier CV (fake-llm/cv-extraction.json). */
+    public static final String FAKE_CV_HEADLINE = "Desarrolladora Web Junior · Java";
+    public static final int FAKE_CV_SKILLS = 5;
     public static final int FAKE_SCORE = 85;
 
     private E2EData() {

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API, authResponse, problem } from '../test/handlers';
 import { server } from '../test/server';
 import { ApiError } from './ApiError';
-import { apiFetch, setUnauthorizedHandler } from './client';
+import { apiFetch, apiRequest, setUnauthorizedHandler } from './client';
 import { loadSession, saveSession } from './session';
 
 afterEach(() => setUnauthorizedHandler(null));
@@ -60,6 +60,38 @@ describe('apiFetch', () => {
 
     expect(contentType).toBe('application/json');
     expect(received).toEqual({ a: 1 });
+  });
+
+  it('envía un FormData como multipart, sin Content-Type JSON y con el token (subida del CV)', async () => {
+    saveSession(authResponse());
+    let contentType: string | null = null;
+    let authorization: string | null = null;
+    let payload = '';
+    server.use(
+      http.post(`${API}/upload`, async ({ request }) => {
+        contentType = request.headers.get('Content-Type');
+        authorization = request.headers.get('Authorization');
+        payload = await request.text();
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const body = new FormData();
+    body.append('file', new File(['%PDF-1.4'], 'cv.pdf', { type: 'application/pdf' }));
+
+    await apiFetch('/upload', { method: 'POST', body });
+
+    expect(contentType).toMatch(/^multipart\/form-data; boundary=/);
+    expect(authorization).toBe('Bearer test.jwt.token');
+    // El nombre y el contenido no se comprueban: el puente de Vitest entre el File de jsdom y el fetch de Node los
+    // pierde. La subida real la cubre el E2E.
+    expect(payload).toContain('name="file"');
+    expect(payload).toContain('Content-Type: application/pdf');
+  });
+
+  it('apiRequest devuelve también el código de estado (201 frente a 200)', async () => {
+    server.use(http.put(`${API}/echo`, () => HttpResponse.json({ id: 'x' }, { status: 201 })));
+
+    await expect(apiRequest('/echo', { method: 'PUT', body: {} })).resolves.toEqual({ status: 201, data: { id: 'x' } });
   });
 
   it('convierte un problem+json en ApiError con sus campos y Retry-After', async () => {

@@ -6,38 +6,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.jobpilot.e2e.support.E2EData;
 import com.jobpilot.e2e.support.E2ETestBase;
+import com.jobpilot.e2e.support.SampleCv;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Mouse;
+import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Response;
+import com.microsoft.playwright.options.AriaRole;
 import com.microsoft.playwright.options.BoundingBox;
+import com.microsoft.playwright.options.FilePayload;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * JP-QA-01 · Flujo principal (readme 2.6), con lo que está implementado hoy:
- * login → pegar una oferta → requisitos → análisis (85) → guardar en el tablero → arrastrar a "Enviada" → recargar.
+ * JP-QA-01 / JP-FE-02 · Flujo principal (readme 2.6), con lo que está implementado hoy:
+ * registro → subir el CV de ejemplo → revisar y guardar el perfil → pegar una oferta → requisitos → análisis (85) →
+ * guardar en el tablero → arrastrar a "Enviada" → recargar.
  *
- * <p>Huecos pendientes, marcados con {@code TODO} donde irán:
- * <ul>
- *   <li>registro → subir el CV de ejemplo → revisar el perfil (JP-BE-04 / JP-FE-02). Mientras tanto se usa el usuario
- *       del seed de E2E, que ya tiene perfil; el registro se prueba aparte en {@link RegistrationE2ETest}.</li>
- *   <li>generar la carta → exportar el PDF y verificar la descarga (JP-BE-07 / JP-FE-05).</li>
- * </ul>
+ * <p>Hueco pendiente, marcado con {@code TODO} donde irá: generar la carta → exportar el PDF y verificar la descarga
+ * (JP-BE-07 / JP-FE-05).
  *
- * <p>Cada ejecución importa su propia oferta y localiza su tarjeta por {@code data-offer-id}: la suite se puede
- * repetir sobre el mismo stack sin reiniciarlo.
+ * <p>Cada ejecución crea su propia cuenta (email aleatorio), importa su propia oferta y localiza su tarjeta por
+ * {@code data-offer-id}: la suite se puede repetir sobre el mismo stack sin reiniciarlo.
  */
 class MainFlowE2ETest extends E2ETestBase {
 
     private static final Pattern OFFER_URL = Pattern.compile("/ofertas/([0-9a-f-]{36})$");
 
     @Test
-    @DisplayName("Flujo principal: oferta → análisis → tablero → Enviada, y se mantiene al recargar")
-    void flujoPrincipalDeLaOfertaAlTablero() {
-        // TODO(JP-BE-04 / JP-FE-02): registro → subir el CV de ejemplo → revisar el perfil, en lugar del login.
-        login();
+    @DisplayName("Flujo principal: registro → CV → perfil → oferta → análisis → tablero → Enviada, y se mantiene al recargar")
+    void flujoPrincipalDelRegistroAlTablero() {
+        register();
+        uploadCvAndSaveProfile();
 
         String offerId = importOffer();
         checkRequirements();
@@ -57,12 +59,41 @@ class MainFlowE2ETest extends E2ETestBase {
         assertThat(column("GUARDADA").locator(card)).hasCount(0);
     }
 
-    private void login() {
-        page.navigate("/login");
-        page.getByTestId("login-email").fill(E2EData.SEED_EMAIL);
-        page.getByTestId("login-password").fill(E2EData.SEED_PASSWORD);
-        page.getByTestId("login-submit").click();
-        assertThat(page.getByTestId("home-greeting")).hasText("Hola, " + E2EData.SEED_FULL_NAME);
+    private static final String FULL_NAME = "Candidata Ficticia E2E";
+
+    /** Cuenta nueva: el registro lleva al onboarding del perfil. */
+    private void register() {
+        page.navigate("/registro");
+        page.getByTestId("register-fullname").fill(FULL_NAME);
+        page.getByTestId("register-email").fill("flujo-" + UUID.randomUUID() + "@jobpilot.test");
+        page.getByTestId("register-password").fill(E2EData.REGISTER_PASSWORD);
+        page.getByTestId("register-submit").click();
+
+        assertThat(page).hasURL(FRONTEND_URL + "/perfil");
+        assertThat(page.getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName("Crea tu perfil").setLevel(1)))
+                .isVisible();
+    }
+
+    /**
+     * Sube el CV ficticio, revisa el borrador de la IA (fake), cambia la ubicación y guarda. El primer guardado
+     * (201) lleva al dashboard, que ya no pide crear el perfil.
+     */
+    private void uploadCvAndSaveProfile() {
+        page.getByTestId("cv-file-input")
+                .setInputFiles(new FilePayload(SampleCv.FILE_NAME, "application/pdf", SampleCv.pdf()));
+
+        assertThat(page.getByTestId("cv-draft-notice")).containsText(SampleCv.FILE_NAME);
+        assertThat(page.getByTestId("profile-headline")).hasValue(E2EData.FAKE_CV_HEADLINE);
+        assertThat(page.getByTestId("skill-chip")).hasCount(E2EData.FAKE_CV_SKILLS);
+        page.getByTestId("profile-location").fill("Valencia (híbrido)");
+
+        Response response = page.waitForResponse(
+                r -> r.request().method().equals("PUT") && r.url().endsWith("/api/v1/profile"),
+                () -> page.getByTestId("profile-save-button").click());
+        assertEquals(201, response.status(), "PUT /profile → " + response.status());
+
+        assertThat(page.getByTestId("home-greeting")).hasText("Hola, " + FULL_NAME);
+        assertThat(page.getByTestId("profile-missing-cta")).hasCount(0);
     }
 
     private String importOffer() {
