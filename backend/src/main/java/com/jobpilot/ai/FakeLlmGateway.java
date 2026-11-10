@@ -28,6 +28,12 @@ public class FakeLlmGateway implements LlmGateway {
         return MODEL_NAME;
     }
 
+    /** Siempre el perfil del usuario del seed de E2E, sea cual sea el CV: con la oferta fake da el 85 del readme. */
+    @Override
+    public ProfileExtraction extractProfile(String cvText) {
+        return responses.load("cv-extraction", ProfileExtraction.class);
+    }
+
     /** Siempre la oferta del Ejemplo 1 del readme (3 obligatorios y 3 deseables), sea cual sea el texto. */
     @Override
     public OfferExtraction extractOffer(String rawText) {

@@ -8,6 +8,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
 /**
@@ -18,6 +19,10 @@ final class ScriptedChatModel implements ChatModel {
 
     private final List<Prompt> prompts = new CopyOnWriteArrayList<>();
     private volatile List<Function<Prompt, ChatResponse>> script = List.of();
+
+    /** Opciones por defecto, como las de {@code spring.ai.anthropic.chat.*} en el modelo real. */
+    private final ChatOptions defaultOptions = ChatOptions.builder()
+            .model("claude-test").maxTokens(4096).temperature(0.7).topK(5).build();
 
     /** Respuestas de texto sucesivas. */
     ScriptedChatModel respond(String... texts) {
@@ -64,6 +69,11 @@ final class ScriptedChatModel implements ChatModel {
 
     static ChatResponse text(String text) {
         return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
+    }
+
+    @Override
+    public ChatOptions getOptions() {
+        return defaultOptions;
     }
 
     @Override

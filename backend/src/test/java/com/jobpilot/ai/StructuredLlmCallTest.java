@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
 /** CA 4, 5, 6, 7 y 9: plantilla, datos delimitados, conversión, validación, un reintento y errores del proveedor. */
@@ -63,6 +64,42 @@ class StructuredLlmCallTest {
     private Prompt sentPrompt() {
         assertThat(model.calls()).isEqualTo(1);
         return model.lastPrompt();
+    }
+
+    // ---- Opciones del modelo por llamada ----
+
+    @Test
+    void sinOpcionesPropiasElPromptNoLlevaOpcionesYElModeloUsaLasSuyas() {
+        model.respond(VALID);
+
+        call.execute(request("Texto"));
+
+        assertThat(sentPrompt().getOptions()).isNull();
+    }
+
+    @Test
+    void lasOpcionesPropiasSeAplicanSobreLasDelModeloSinPerderLasDemas() {
+        model.respond(VALID);
+
+        call.execute(StructuredRequest.builder("test-echo", EchoResult.class)
+                .variable("tarea", "resumir la oferta")
+                .data("texto", "Texto")
+                .maxTokens(8192)
+                .build());
+
+        ChatOptions options = sentPrompt().getOptions();
+        assertThat(options.getMaxTokens()).isEqualTo(8192);
+        assertThat(options.getModel()).isEqualTo("claude-test");
+        assertThat(options.getTemperature()).isEqualTo(0.7);
+        assertThat(options.getTopK()).isEqualTo(5);
+    }
+
+    @Test
+    void lasOpcionesNoValidasSeRechazanAlConstruirLaPeticion() {
+        assertThatThrownBy(() -> StructuredRequest.builder("test-echo", EchoResult.class).maxTokens(0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> StructuredRequest.builder("test-echo", EchoResult.class).maxTokens(-1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // ---- Respuesta válida ----

@@ -65,6 +65,29 @@ public class Profile {
         this.updatedAt = createdAt;
     }
 
+    /**
+     * Sustituye el contenido del perfil por el que ha revisado el usuario ({@code PUT /profile}). El id no cambia,
+     * así que los análisis que ya apuntan a este perfil se conservan. El CV se mantiene: solo lo cambia
+     * {@link #attachCv(String, String, Instant)}.
+     */
+    public void replace(String headline, String summary, Short yearsExperience, String location,
+            List<LanguageItem> languages, List<EducationItem> education, Instant now) {
+        this.headline = headline;
+        this.summary = summary;
+        this.yearsExperience = yearsExperience;
+        this.location = location;
+        this.languages = List.copyOf(languages);
+        this.education = List.copyOf(education);
+        this.updatedAt = now;
+    }
+
+    /** Asocia el texto de un CV recién subido al perfil (el PDF no se guarda). */
+    public void attachCv(String cvFileName, String cvRawText, Instant now) {
+        this.cvFileName = cvFileName;
+        this.cvRawText = cvRawText;
+        this.updatedAt = now;
+    }
+
     public UUID getId() {
         return id;
     }

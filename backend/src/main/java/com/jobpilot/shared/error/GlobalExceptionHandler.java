@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -52,6 +53,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<Object> handleInvalidRequest(InvalidRequestException ex, NativeWebRequest request) {
         return validationProblem(List.of(new FieldError(ex.getField(), ex.getMessage())), new HttpHeaders(),
                 request);
+    }
+
+    @ExceptionHandler(InvalidCvFileException.class)
+    ProblemDetail handleInvalidCvFile(InvalidCvFileException ex, HttpServletRequest request) {
+        return problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ProblemTypes.INVALID_CV_FILE, "Fichero no válido",
+                ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(CvWithoutTextException.class)
+    ProblemDetail handleCvWithoutText(CvWithoutTextException ex, HttpServletRequest request) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, ProblemTypes.CV_WITHOUT_TEXT, "El PDF no tiene texto",
+                ex.getMessage(), request);
     }
 
     /**
@@ -158,6 +171,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 })
                 .toList();
         return validationProblem(errors, headers, request);
+    }
+
+    /** El CV supera {@code spring.servlet.multipart.max-file-size} (5 MB): 400 en {@code file}, como en la HU-01. */
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        return validationProblem(List.of(new FieldError("file", InvalidCvFileException.DETAIL)), new HttpHeaders(),
+                request);
     }
 
     @Override
