@@ -5,7 +5,7 @@ import { Alert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { toGeneralError } from '../../components/serverErrors';
 import { formatDate } from '../offers/labels';
-import { formatWait } from '../../components/formatWait';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { isBlocking } from './labels';
 import { RequirementMatchTable } from './RequirementMatchTable';
 import { ScoreRing } from './ScoreRing';
@@ -96,7 +96,7 @@ export function AnalysisPanel({ offerId }: { offerId: string }) {
         </p>
       )}
 
-      {showError && <AnalysisError error={create.error} />}
+      {showError && <ApiErrorAlert error={create.error} testId="analysis-error" />}
 
       {latest.isSuccess &&
         (analysis ? (
@@ -110,18 +110,6 @@ export function AnalysisPanel({ offerId }: { offerId: string }) {
           )
         ))}
     </section>
-  );
-}
-
-function AnalysisError({ error }: { error: ApiError | Error | null }) {
-  const { title, detail } = toGeneralError(error);
-  const retryAfter = error instanceof ApiError ? error.retryAfter : null;
-
-  return (
-    <Alert title={title} testId="analysis-error">
-      {detail && <p>{detail}</p>}
-      {retryAfter !== null && retryAfter > 0 && <p>Vuelve a intentarlo dentro de {formatWait(retryAfter)}.</p>}
-    </Alert>
   );
 }
 
