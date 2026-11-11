@@ -1,10 +1,14 @@
 > Registro del uso de IA en el proyecto **JobPilot** (Andrés Avellá Navarro).
-> Para cada sección se recoge el prompt con el que se generó el contenido y los prompts de revisión con los que se refina.
-> ⏳ = prompt **planificado para una entrega posterior** (indicada entre paréntesis). Se ejecutará en esa fase y entonces se añadirán su resultado y el criterio humano. Los prompts sin ⏳ ya se han ejecutado.
+> Para cada sección se recoge el prompt con el que se generó el contenido y los prompts de revisión con los que se refina. Versión de la **entrega final** (Entrega 3): todos los prompts que estaban planificados indican si se ejecutaron, cómo y, si no, por qué.
 
 ## Índice
 
 0. [Flujo de trabajo con IA](#0-flujo-de-trabajo-con-ia)
+   - [0.1. Prompts y workflows clave](#01-prompts-y-workflows-clave)
+   - [0.2. Herramientas y modelos por fase](#02-herramientas-y-modelos-por-fase)
+   - [0.3. Contexto avanzado](#03-contexto-avanzado)
+   - [0.4. Criterio humano](#04-criterio-humano)
+   - [0.5. Evolución del uso de la IA](#05-evolución-del-uso-de-la-ia)
 1. [Descripción general del producto](#1-descripción-general-del-producto)
 2. [Arquitectura del sistema](#2-arquitectura-del-sistema)
 3. [Modelo de datos](#3-modelo-de-datos)
@@ -17,42 +21,46 @@
 
 ## 0. Flujo de trabajo con IA
 
-### Prompts y workflows clave (resumen)
+### 0.1. Prompts y workflows clave
 
-Los 5 que fueron el núcleo del desarrollo, de la idea al código:
+Los 5 que fueron el núcleo del proyecto, agrupados por fase, de la idea a la entrega:
 
 | # | Fase | Prompt o workflow | Dónde |
 |---|---|---|---|
-| 1 | Análisis | Generar la idea a partir de un problema real (estoy buscando trabajo) y acotarla a 5 funcionalidades | Sección 1 → Prompt 1 |
-| 2 | Diseño | Generar la documentación completa de la Entrega 1 siguiendo las plantillas oficiales | Sección 1 → Prompt 3 |
-| 3 | Diseño (revisión) | Cruzar API, modelo de datos y tickets en busca de incoherencias, en un chat nuevo que no había escrito el documento: encontró 24 | Sección 4 → Prompt 3 |
-| 4 | Contexto para implementar | Generar `CLAUDE.md` (reglas de arquitectura) y el comando `/ticket` a partir del readme y de la Lección 2 | Sección 2.3 → Prompt 2 |
-| 5 | Implementación y pruebas | **Workflow `/ticket` (SDD)**: especificación → mi OK → tests primero → código → verificación → prueba real → PR. Aplicado a los 10 tickets de la Entrega 2 | Sección 6 → Prompt 3 |
+| 1 | Análisis y diseño | De un problema real (estoy buscando trabajo) a la idea acotada a 5 funcionalidades y a la documentación completa de la Entrega 1 con las plantillas oficiales | Sección 1 → Prompts 1 y 3 |
+| 2 | Diseño (revisión) | Cruzar API, modelo de datos y tickets en busca de incoherencias, en un chat nuevo que no había escrito el documento: encontró 24 | Sección 4 → Prompt 3 |
+| 3 | Implementación y pruebas | **Workflow `/ticket` (SDD)**: especificación → revisión del plan por un segundo modelo → mi OK → tests primero → código → verificación → prueba real → resumen revisado → PR. Aplicado a los 18 tickets | Sección 6 → Prompt 3 |
+| 4 | Validación de la IA del producto | **Prueba con la IA real**: comparar el borrador del CV con mi CV real y corregir la plantilla del prompt para cualquier CV (JP-BE-04), y validación automática con criterios flexibles (`LlmLiveIT`, JP-AI-01) | Sección 2.6 → Prompt 4 |
+| 5 | Mantenimiento y entrega | **Cierre**: revisar el readme de principio a fin contra el código y verificar la instalación como un revisor, desde un clon limpio | Sección 7 → Prompt 4 |
 
-### Herramientas y modelos por fase
+### 0.2. Herramientas y modelos por fase
 
 | Fase del ciclo de vida | Herramienta | Modelo | Uso |
 |---|---|---|---|
 | **Análisis** | Claude (claude.ai, Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Generar la idea a partir de un problema real (búsqueda de empleo), acotar el MVP a 5 funcionalidades y redactar las historias de usuario. |
-| **Diseño** | Claude (claude.ai) | Claude Opus 5.5 | Arquitectura, modelo de datos, contrato OpenAPI, tickets y la documentación de la Entrega 1. |
+| **Diseño** | Claude (claude.ai) | Claude Opus 5.5 | Arquitectura, modelo de datos, contrato OpenAPI, tickets y la documentación de la Entrega 1. Revisiones en chats nuevos que no habían escrito el documento. |
 | **Implementación** | Claude Code (terminal, Windows) | Claude Opus 5.5 (modelo por defecto de Claude Code) | Implementación ticket a ticket con el comando `/ticket`, guiada por el `readme.md` y el `CLAUDE.md`. |
-| **Revisión de cada plan** | Claude (claude.ai, Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Revisar el plan de cada `/ticket` antes de dar el OK, preparar las respuestas a sus dudas y las descripciones de las PRs. Un segundo modelo que no ha escrito el código actúa como revisor. |
-| **Pruebas** | Claude Code | Claude Opus 5.5 | Tests primero en cada ticket (fase 2 de `/ticket`): unitarios, de integración con Testcontainers y prueba real con el perfil `dev`. El E2E con Playwright está previsto para la Entrega 3. |
-| **Despliegue** | Claude Code | Claude Opus 5.5 | Dockerfiles multi-stage, nginx con CSP, `docker-compose.yml` y `docker-compose.e2e.yml`, pipeline de GitHub Actions y Dependabot (JP-OPS-01). El despliegue público (opcional) queda para la Entrega 3. |
-| **Mantenimiento** | Claude (claude.ai) y Claude Code | Claude Opus 5.5 | Actualización del readme y de este archivo al cerrar cada bloque de tickets (PR #5 y cierre de la Entrega 2), deuda técnica documentada en cada ticket y comprobación del estado del repo antes de cada paso. |
+| **Revisión de cada plan y resumen** | Claude (claude.ai, chat del Proyecto "Proyecto Final Master") | Claude Opus 5.5 | Revisar el plan de cada `/ticket` antes de dar el OK, preparar las respuestas a sus dudas, revisar el resumen final y redactar las descripciones de las PRs. Un segundo modelo que no ha escrito el código actúa como revisor. |
+| **Pruebas** | Claude Code | Claude Opus 5.5 | Tests primero en cada ticket (fase 2 de `/ticket`): unitarios, de integración con Testcontainers, frontend con Vitest + MSW, **E2E con Playwright for Java** (JP-QA-01) y **validación con el LLM real** (`LlmLiveIT`, JP-AI-01). Además, prueba real con el perfil `dev` o Docker Compose en cada ticket. |
+| **Despliegue e infraestructura** | Claude Code | Claude Opus 5.5 | Dockerfiles multi-stage, nginx con CSP, `docker-compose.yml` y `docker-compose.e2e.yml`, pipeline de GitHub Actions y Dependabot (JP-OPS-01). El despliegue público (opcional) quedó fuera de alcance. Desde que GitHub desactivó Actions (11/11/2026), Claude Code ejecuta en local los mismos pasos de `ci.yml`. |
+| **Mantenimiento** | Claude (claude.ai) y Claude Code | Claude Opus 5.5 | Readme actualizado dentro de cada ticket, deuda técnica documentada, cierre de cada entrega (revisión del readme contra el código y verificación desde un clon limpio) y este archivo. |
+| **Dentro del producto** | API de Anthropic a través de Spring AI 2.0 | **Claude Sonnet 5.5** (`claude-sonnet-5-5`, configurable con `ANTHROPIC_MODEL`) | Estructurar el CV, extraer los requisitos de la oferta, clasificar el encaje y redactar la carta y el CV adaptado. Elegido por coste y velocidad. En desarrollo y en los tests se usa `FakeLlmGateway` (respuestas fijas). |
 
-Además, **la IA forma parte del producto**: el backend usa Claude a través de Spring AI para estructurar CVs, extraer requisitos, evaluar el encaje y redactar cartas. Dentro del producto se usa **Claude Sonnet 5.5** (`claude-sonnet-5-5`, configurable con `ANTHROPIC_MODEL`), elegido por coste y velocidad. Para desarrollar se usa Opus 5.5.
-
-### Contexto avanzado
+### 0.3. Contexto avanzado
 
 - **Proyecto de claude.ai** con la descripción y las reglas del máster como contexto permanente, para que todas las respuestas respeten los requisitos de evaluación (3–5 funcionalidades, tests, IA en las fases del ciclo de vida).
 - **Plantillas oficiales** del `readme.md` y el `prompts.md` pasadas como entrada para que la documentación siga exactamente su estructura.
-- **`CLAUDE.md`** en la raíz del repo (ver sección 2.3 → Prompt 2): el readme como fuente de verdad, stack con versiones, capas *package-by-feature*, reglas obligatorias (DTOs como `record`, `ProblemDetail`, consultas filtradas por `userId`, `LlmGateway` como único acceso al LLM, la puntuación la calcula Java), comandos para Windows, el flujo SDD y la regla de **no hacer commit sin que se lo pida**. Claude Code lo lee en cada sesión, y se ha ido actualizando con los cambios de los tickets (p. ej. Flyway en Boot 4 y JWT con Spring Security).
+- **`CLAUDE.md`** en la raíz del repo (ver sección 2.3 → Prompt 2): el readme como fuente de verdad, stack con versiones, capas *package-by-feature*, reglas obligatorias (DTOs como `record`, `ProblemDetail`, consultas filtradas por `userId`, `LlmGateway` como único acceso al LLM, la puntuación la calcula Java, llamadas al LLM fuera de transacciones), comandos para Windows, el flujo SDD y la regla de **no hacer commit sin que se lo pida**. Claude Code lo lee en cada sesión, y lo he ido actualizando con lo aprendido en los tickets: Flyway en Boot 4, JWT con Spring Security, el seed de E2E fuera de `db/seed/` y la **regla de idioma** (responder siempre en español), que añadí en JP-BE-08 cuando la IA empezó a contestar en inglés después de compactar el contexto.
 - **Comando personalizado `/ticket <ID>`** (`.claude/commands/ticket.md`): aplica el flujo SDD de la Lección 2 a cada ticket en 5 fases: especificación con alcance, criterios, plan de archivos y dudas → **espera mi OK** → tests primero → implementación → verificación completa → resumen con una propuesta para este archivo (ver sección 6 → Prompt 3).
-- **Una conversación por ticket**: `/clear` antes de cada `/ticket`, para que el contexto no se llene y no haya que compactar a mitad de ticket.
-- **Subagente de revisión (previsto)**: un agente que no ha visto el desarrollo revisa cada PR contra los criterios de aceptación del ticket, para que el código no se valide a sí mismo.
+- **Una conversación por ticket:** `/export` para guardar la conversación al cerrar el ticket y `/clear` antes del siguiente `/ticket`, para que el contexto no se llene y no haya que compactar a mitad de ticket.
+- **Segundo modelo como revisor antes de cada OK:** el plan de la fase 1 y el resumen de la fase 5 de cada ticket los revisaba Claude en el chat del proyecto de claude.ai, que no escribía el código. Con esa revisión preparaba mis respuestas a las dudas y las correcciones del plan, y solo después daba el OK a Claude Code.
+- **Subagente de revisión:** estaba previsto en la Entrega 1, pero no se usó. Lo sustituyó el segundo modelo de claude.ai, que cumple el mismo objetivo: que el código no se valide a sí mismo.
 
-### Criterio humano (ajustes manuales sobre la salida de la IA)
+### 0.4. Criterio humano
+
+Ajustes y decisiones míos sobre la salida de la IA.
+
+**Entregas 1 y 2**
 
 | Momento | Decisión tomada por mí |
 |---|---|
@@ -61,9 +69,9 @@ Además, **la IA forma parte del producto**: el backend usa Claude a través de 
 | Estructura de la documentación | Exigí seguir las plantillas oficiales del máster en lugar del formato libre que proponía la IA. |
 | Revisión de versiones | Pedí revisar que la documentación cumpliera los requisitos de la entrega; a raíz de esa revisión se actualizó el stack a Spring Boot 4 / Spring AI 2.0, porque la propuesta inicial usaba una versión ya sin soporte. |
 | Revisión de arquitectura (2.1) | Ejecuté la revisión en un chat nuevo, para que no la hiciera la misma conversación que había escrito el documento. Acepté, entre otros, los cambios sobre la gestión de errores del LLM (504 / 503 / 502). |
-| Revisión de coherencia (secciones 3, 4 y 6) | La revisión destapó que tres cambios que yo había aceptado en la ronda de la 2.1 contradecían otras secciones. **Lección:** después de aceptar un cambio hay que cruzarlo con el resto del documento. De las 24 incoherencias encontradas, **decidí corregir la 1 a la 11**, que son las que afectan al flujo principal, y dejar la 12 a la 24 (tipos, textos y ajustes menores) para antes de la Entrega 2. **Cumplido:** al cerrar la Entrega 2 están resueltas todas salvo la 24 (`llm_model` en `generated_documents`, opcional), que se hará con JP-BE-07, el ticket que crea esos documentos. |
+| Revisión de coherencia (secciones 3, 4 y 6) | La revisión destapó que tres cambios que yo había aceptado en la ronda de la 2.1 contradecían otras secciones. **Lección:** después de aceptar un cambio hay que cruzarlo con el resto del documento. De las 24 incoherencias encontradas, **decidí corregir la 1 a la 11**, que son las que afectan al flujo principal, y dejar la 12 a la 24 (tipos, textos y ajustes menores) para antes de la Entrega 2. **Resultado final:** resueltas todas salvo la 24 (`llm_model` en `generated_documents`, opcional), que no se implementó (ver sección 4). |
 | Revisión del modelo de datos (sección 3) | Apliqué el diff completo de la IA (FKs compuestas, índices documentados, `CHECK` nuevos, `VARCHAR(3)` para la moneda) y alineé el ticket de base de datos. Mantuve JSONB en idiomas, formación y sugerencias porque nunca se filtran por ellos en SQL. |
-| Revisión de cada plan de `/ticket` (Entrega 2) | No di nunca el OK a un plan sin revisarlo, y respondí a **todas** sus dudas numeradas, no solo a algunas. El detalle por ticket está en la sección 6 → Prompt 3. |
+| Revisión de cada plan de `/ticket` | No di nunca el OK a un plan sin revisarlo, y respondí a **todas** sus dudas numeradas, no solo a algunas. El detalle por ticket está en la sección 6 → Prompt 3. |
 | Prueba real además de los tests | Exigí en cada ticket arrancar la app con el perfil `dev` contra la BD de Docker antes del commit. En JP-BE-01 detectó un `.env` vacío y comentarios en la misma línea que el valor, que los tests con Testcontainers no ven. |
 | Versiones por compatibilidad | Fijé Spring Boot 4.1.x (no una versión menor posterior) porque Spring AI 2.0 solo soporta Boot 4.0/4.1. |
 | Seguridad: menos código propio | La IA detectó que JJWT arrastra Jackson 2 y Boot 4 usa Jackson 3, y propuso un adaptador propio. Elegí el soporte de JWT de Spring Security (OAuth2 Resource Server, Nimbus) para no escribir ni el adaptador ni el filtro JWT. |
@@ -72,8 +80,43 @@ Además, **la IA forma parte del producto**: el backend usa Claude a través de 
 | Probarlo yo en el navegador | Además de la prueba de Claude Code con curl, probé cada pantalla en el navegador. Encontré dos fallos que ni los tests ni el smoke test veían: una URL de la API absoluta que la CSP bloqueaba (JP-OPS-01; ahora el smoke test lo comprueba) y una URL no válida que bloqueaba el botón sin mostrar el error (JP-FE-03; ahora tiene test). |
 | No perder datos del usuario | En JP-BE-05 la IA propuso guardar la oferta solo después de llamar al LLM. Lo cambié a PENDIENTE → LLM → COMPLETADA/FALLIDA para que el texto pegado no se pierda nunca, ni con errores que no son de IA. |
 | Cumplir lo comprometido | El plan de JP-BE-06 se dejaba las incoherencias 15–17 y la cobertura ≥ 90 % de la definición de hecho del readme. Pedí incluirlas (migración V3 y JaCoCo), y comprobar antes que los datos de prueba cumplían las nuevas restricciones para que la migración no fallara sobre una BD existente. |
-| Pensar en quien evalúa | En JP-FE-04, un usuario recién registrado no tiene perfil: en vez de mandarlo a una 404, pedí un placeholder en `/perfil` que explica que llegará en la próxima versión. |
-| IA real frente a coste | Decidí cerrar la Entrega 2 en modo `fake`, documentándolo con claridad en el readme, y decidir en la Entrega 3 entre la API de Anthropic (unos pocos euros) y un modelo local con Ollama (gratis, otro adaptador del puerto `LlmGateway`). |
+| Pensar en quien evalúa | En JP-FE-04, un usuario recién registrado no tiene perfil: en vez de mandarlo a una 404, pedí un placeholder en `/perfil` que explica que llegará en la próxima versión (lo sustituyó el onboarding real de JP-FE-02). |
+| IA real frente a coste | Decidí cerrar la Entrega 2 en modo `fake`, documentándolo con claridad en el readme, y decidir en la Entrega 3 entre la API de Anthropic y un modelo local con Ollama. **Decisión en la Entrega 3:** la API de Anthropic (ver abajo). |
+
+**Entrega 3**
+
+| Momento | Decisión tomada por mí |
+|---|---|
+| IA real: proveedor y coste | Elegí la API de Anthropic frente a Ollama. Para controlar el coste usé saldo de prepago **sin recarga automática**. La clave nunca la escribo en la terminal ni en el chat con la IA: solo en el `.env`, que está en `.gitignore`. |
+| JP-AI-01: validar un sistema no determinista | Pedí que los tests `llm-live` usaran **criterios flexibles** (estructura y reglas de negocio: validadores, un resultado por requisito, de 3 a 5 sugerencias, puntuación entre 0 y 100), nunca comparar el texto exacto. Al ejecutarlos detecté que 3 tests de integración (`ApplicationContextIT`, `DemoUserLoginIT` y `SeedDataIT`) dependían del `LLM_MODE` de mi `.env`: ahora fijan `llm.mode=fake`. |
+| JP-BE-08: PATCH parcial con Jackson 3 | Acepté `FieldUpdate<T>` para distinguir en el `PATCH` un campo ausente de un `null` explícito, por cómo trata Jackson 3 los `Optional`. Cuando la IA empezó a responder en inglés después de compactar el contexto, añadí la regla de idioma a `CLAUDE.md`. |
+| JP-FE-06: cuando la IA decide sola | Mis respuestas al menú de dudas se perdieron y la IA eligió por su cuenta la opción "más fiel a la spec": dejó fuera el botón **"Guardar en el tablero"** (sin él, ninguna oferta llegaba al tablero) y validaba las transiciones prohibidas solo en el backend. Lo corregí: botón incluido y bloqueo en el cliente con un *toast*, con el 409 del backend como red de seguridad. También pedí *lazy loading* de las páginas para quitar el aviso de 500 kB del build. |
+| JP-QA-01: un E2E estable | Pedí el arrastre con `mouse.down` / `move` / `up` (con dnd-kit, `dragTo()` falla), ninguna espera fija, revisar si el límite de peticiones rompía la suite y ejecutarla varias veces seguidas: 6 ejecuciones en verde. El seed de E2E va en `db/e2e-seed/` para no contaminar el perfil `dev`. Modo visible con `slowMo` para grabar el vídeo. (Ver sección 2.6 → Prompt 3.) |
+| JP-BE-04: una spec contradictoria | La spec pedía guardar el texto del CV, pero el perfil aún no existe al subirlo. Se resolvió con un **borrador en memoria** de 30 minutos que se guarda con el `PUT /profile`. Pedí resolver ya con un 409 la carrera del primer guardado en vez de dejarla como deuda, un límite de páginas y protección contra *prompt injection* en la plantilla. |
+| JP-BE-04: probar con mi CV real | Probé con la IA real y mi CV real, y comparé el borrador con el PDF. Detecté que una nota oculta de la plantilla del CV ("PHP / Java (según tu caso)") hacía que la IA descartara PHP y Java, y que el titular se inventaba tecnologías. Pedí reglas en la plantilla del prompt para cualquier CV (ver sección 2.6 → Prompt 4): el resultado pasó a 13 habilidades, con PHP y Java. Al pedir `temperature` 0, la API la rechazó para este modelo y se quitó. También se descubrió que el `LLM_MODE` del `.env` gana al perfil `llm-live`, y se documentó en el readme. |
+| JP-FE-02: datos personales en los tests | El E2E empieza ya en el registro y sube un **CV ficticio generado en memoria**, nunca mi CV real, que no entra en el repositorio. |
+| JP-BE-07: la IA no ve mis datos | La IA no recibe el nombre del usuario: el servidor añade la firma, y pedí escapar el Markdown del nombre. El PDF no carga ningún recurso externo, con tests que cuentan las peticiones a un servidor local (0). Revisé los PDF reales generados: una carta de 301 palabras, honesta con mi nivel de React. |
+| JP-FE-05: menos es más seguro | "Exportar PDF" queda desactivado mientras haya cambios sin guardar, en lugar de guardar automáticamente. Sin vista previa HTML, para no tener que sanear el Markdown que genera la IA: el frontend nunca lo convierte a HTML. |
+| CI desactivada por GitHub | GitHub desactivó Actions en el repositorio el 11/11/2026. Desde entonces verifico en local con los mismos comandos de `ci.yml` (backend, frontend y E2E) antes de cada fusión, y lo documenté en el readme con capturas. |
+| Cierre: el readme fiel al código | Pedí revisar el readme de principio a fin contra el código. Corrigió referencias inventadas o desfasadas (`OwnershipIT` y `cover-letter.st`, que no existen, y JUnit 5 → 6) y consolidó la deuda técnica en un solo sitio. Después pedí la verificación como revisor desde un clon limpio, que encontró dos instrucciones ambiguas (ver sección 7 → Prompt 4). |
+
+### 0.5. Evolución del uso de la IA
+
+| | Entrega 1 — Documentación técnica | Entrega 2 — Código funcional | Entrega 3 — Entrega final |
+|---|---|---|---|
+| **Herramienta principal** | Claude en claude.ai (chat) | Claude Code en la terminal + Claude en claude.ai como revisor | Lo mismo: una conversación por ticket con `/export` y `/clear` |
+| **Papel de la IA** | Generar la idea, la arquitectura y la documentación | Implementar ticket a ticket con tests primero | Además, ser **parte del producto** (Claude Sonnet 5.5 con la API real) y verificar la entrega como un revisor |
+| **Contexto** | Proyecto de claude.ai y plantillas oficiales | `CLAUDE.md`, comando `/ticket` y el readme como fuente de verdad | `CLAUDE.md` ampliado con lo aprendido (regla de idioma, seed de E2E) |
+| **Revisión** | Revisiones en un chat nuevo que no había escrito el documento (24 incoherencias) | Un segundo modelo revisa cada plan y resumen antes de mi OK; prueba real con el perfil `dev` | Lo mismo, más pruebas con la IA real y con mi CV real, y verificación desde un clon limpio |
+| **Pruebas de la IA** | Diseño de la estrategia: el LLM clasifica y Java puntúa | Tests deterministas con `FakeLlmGateway` y respuestas simuladas | Validación con el modelo real y criterios flexibles (`llm-live`), y E2E con Playwright |
+| **Mi papel** | Elegir la idea y el stack, y decidir qué incoherencias corregir | Responder a todas las dudas, exigir la prueba real y no perder datos del usuario | Detectar lo que la IA no ve: decisiones tomadas sola (JP-FE-06), sesgos de una plantilla de CV real (JP-BE-04), dependencias ocultas del `.env` (JP-AI-01) y la CI desactivada |
+
+**Qué aprendí:**
+
+- La IA rinde más con una **especificación cerrada** (readme + `CLAUDE.md`) y un **flujo fijo** (`/ticket`). Cuando la spec es ambigua o contradictoria, lo mejor es que pare y pregunte.
+- **Un segundo modelo que no ha escrito el código** encuentra problemas que la conversación que lo escribió no ve, igual que en la Entrega 1 con la documentación.
+- **Los tests con respuestas simuladas no bastan para un sistema con LLM:** hacen falta pruebas con el modelo real y datos reales (mi CV), pero con criterios flexibles y sin datos personales en el repositorio.
+- **El contexto se gestiona:** una conversación por ticket y reglas explícitas en `CLAUDE.md` evitan que la IA olvide decisiones o cambie de idioma después de compactar.
 
 ---
 
@@ -178,7 +221,7 @@ conocido (por ejemplo, Spring AI y la versión de Spring Boot). Formato: tabla
 componente | versión | nota.
 ```
 
-**Prompt 3:** ⏳ (Entrega 3) Simplificación para un perfil junior. *No hizo falta en la Entrega 2: el stack se mantuvo, y solo se cambió JJWT por el soporte de JWT de Spring Security (ver sección 6).*
+**Prompt 3:** Simplificación para un perfil junior. *No se ejecutó: no hizo falta. El stack se mantuvo hasta el final, y el único cambio fue sustituir JJWT por el soporte de JWT de Spring Security (ver sección 6).*
 
 ```
 De estos componentes, ¿cuáles podría eliminar o sustituir por algo más simple sin
@@ -231,7 +274,7 @@ docker-compose.yml con postgres:16 (volumen persistente), backend y frontend, le
 las variables de .env. Añade docker-compose.e2e.yml con LLM_MODE=fake.
 ```
 
-**Prompt 3:** Pipeline de CI. *Se hizo con `/ticket JP-OPS-01`: jobs `backend` y `frontend` en paralelo y `e2e` con smoke test (Playwright llegará con JP-QA-01).* Ajuste humano: Dependabot semanal, agrupado y con un máximo de 3 PRs abiertas; la primera ejecución real en GitHub salió en verde.
+**Prompt 3:** Pipeline de CI. *Se hizo con `/ticket JP-OPS-01`: jobs `backend` y `frontend` en paralelo y `e2e` con smoke test, al que JP-QA-01 añadió después Playwright.* Ajuste humano: Dependabot semanal, agrupado y con un máximo de 3 PRs abiertas; la primera ejecución real en GitHub salió en verde.
 
 ```
 Crea .github/workflows/ci.yml con tres jobs: backend (./mvnw verify, que incluye los
@@ -244,7 +287,12 @@ Maven y npm. El deploy a Render solo debe ejecutarse en main y si todo está en 
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 3) Revisión de amenazas
+**Prompt 2:** Revisión de amenazas. *No se ejecutó como prompt aparte. Las amenazas se trataron dentro de cada ticket, con un test que demuestra cada control:*
+- ***Prompt injection:*** *los datos del usuario van delimitados y marcados como no confiables en las plantillas (`_system-base.st`, JP-BE-03; `cv-extraction.st`, JP-BE-04). `ProfileControllerIT` sube un CV con instrucciones incrustadas.*
+- ***PDF sin recursos externos:*** *OpenHTMLtoPDF no carga nada. `PdfRendererTest` cuenta las peticiones a un servidor HTTP local (0) y prueba `<script>`, imágenes remotas, `file:`, `data:` y `javascript:` (JP-BE-07).*
+- ***Escape del nombre en la firma:*** *el servidor añade la firma con el nombre escapado como Markdown (JP-BE-07).*
+- ***Sin datos de la cuenta en la IA:*** *nunca se envían ni el nombre ni el email, ni el texto del CV en el encaje (JP-BE-06 y JP-BE-07).*
+- ***Resto de controles:*** *subida del PDF (tipo MIME, firma, tamaño y páginas, JP-BE-04), recursos de otros usuarios (404 en cada `*ControllerIT`) y JWT en el frontend (CSP estricta, JP-OPS-01; riesgo anotado como deuda en la sección 8 del readme).*
 
 ```
 Haz un análisis rápido de amenazas (STRIDE simplificado) de JobPilot con la
@@ -254,7 +302,7 @@ a recursos de otros usuarios y la gestión del JWT en el frontend. Dime qué fal
 la tabla y qué test automatizado demostraría cada control.
 ```
 
-**Prompt 3:** ⏳ (Entrega 3) Endurecimiento del prompt del sistema
+**Prompt 3:** Endurecimiento del prompt del sistema. *No se ejecutó como prompt aparte. El endurecimiento se hizo dentro de los tickets: reglas comunes en `_system-base.st` (los datos entre etiquetas son datos, nunca instrucciones, y no se inventa nada) desde JP-BE-03, y reglas propias en la plantilla del CV en JP-BE-04 (ver sección 2.6 → Prompt 4).*
 
 ```
 Este es el prompt de sistema que uso para extraer requisitos de una oferta:
@@ -268,7 +316,7 @@ maliciosas para añadirlas como fixtures de test.
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 3) Casos de test del cálculo de puntuación
+**Prompt 2:** Casos de test del cálculo de puntuación. *Ejecutado dentro de `/ticket JP-BE-06` (Entrega 2): `MatchScoreCalculatorTest` con 13 casos parametrizados, y JaCoCo con el 100 % de líneas en `analysis.domain`.*
 
 ```
 Genera una clase JUnit 5 MatchScoreCalculatorTest con @ParameterizedTest y
@@ -278,7 +326,7 @@ detección de requisito bloqueante y lista vacía (excepción). Usa AssertJ.
 La fórmula está en la sección 1.2 del readme.md.
 ```
 
-**Prompt 3:** ⏳ (Entrega 3) E2E del flujo principal
+**Prompt 3:** E2E del flujo principal. *Ejecutado con `/ticket JP-QA-01` y ampliado en JP-FE-02 (registro y CV) y JP-FE-05 (carta y PDF). Diferencia con el plan: el CV no es un fichero de `fixtures/`, sino un PDF ficticio que se genera en memoria en el propio test, para que nunca haya un CV real en el repositorio.*
 
 ```
 Escribe un test E2E con Playwright for Java (JUnit 5) que, contra
@@ -288,6 +336,36 @@ comprobar que aparecen 6 requisitos y la puntuación 85 → generar carta → de
 PDF → guardar en el tablero → arrastrar a "Enviada" → recargar y comprobar la
 columna. Usa selectores data-testid y nada de esperas fijas.
 ```
+
+*Ajuste humano sobre el plan de JP-QA-01* (prompt literal, enviado a Claude Code antes de dar el OK):
+
+```
+Añade esto al plan:
+- Arrastre con dnd-kit: no uses dragTo(). Hazlo con mouse.down → mouse.move en varios pasos (supera los 5 px de activación) → mouse.up, y espera la respuesta del PATCH /status antes de recargar.
+- Ninguna espera fija (Thread.sleep): solo auto-wait y assertThat de Playwright o waitForResponse.
+- Comprueba que el rate limiting (Bucket4j) de login/registro no rompe la suite al ejecutarla varias veces seguidas; si lo hace, ajústalo solo en el perfil e2e.
+- Ejecuta la suite 3 veces seguidas en local contra el stack e2e para comprobar que es estable, y dime cuánto tarda.
+```
+
+*Resultado:* arrastre desde el asa ⠿ de la tarjeta con `mouse.down` / `move` / `up` y `waitForResponse`, sin esperas fijas. El cupo de IA se sube solo en el perfil `e2e`, y el seed de E2E va en `db/e2e-seed/` para no contaminar el perfil `dev`. La suite pasó 6 veces seguidas en verde. Además, un modo visible (`-Dheadless=false -DslowMo=600`) para grabar el vídeo.
+
+**Prompt 4:** Prueba con la IA real. **Workflow clave de la Entrega 3.**
+
+En dos partes:
+
+**a) Validación automática con criterios flexibles (JP-AI-01).** *Descrito como workflow: no conservo el texto literal de los prompts.* Con `/ticket JP-AI-01`, Claude Code creó `LlmLiveIT` (`@Tag("llm-live")`), que llama al `SpringAiLlmGateway` real con 3 ofertas ficticias, un perfil de ejemplo y, desde JP-BE-07, una carta. Mi criterio fue **validar estructura y reglas, nunca el texto exacto**: las respuestas pasan los validadores, cada requisito tiene un resultado, hay de 3 a 5 sugerencias, la puntuación está entre 0 y 100 y la carta cumple la HU-04. El grupo queda fuera de `mvnw verify` y de la CI, y se ejecuta a mano con `mvnw verify -Pllm-live`, que lee la clave del `.env`. Al ejecutarlo detecté que 3 tests de integración dependían del `LLM_MODE` de mi `.env`; ahora fijan `llm.mode=fake`.
+
+**b) Validación con mi CV real (JP-BE-04).** Probé la subida del CV con la IA real y comparé el borrador con el PDF. Prompt literal:
+
+```
+He comparado el borrador con mi CV. Está bien salvo dos cosas, y quiero que la plantilla las resuelva para cualquier CV:
+1. Habilidades con barra o agrupadas: mi CV pone "PHP / Java" (con una nota de plantilla oculta "(según tu caso)") y la IA descartó las dos. Indica en cv-extraction.st que las habilidades separadas por "/", "," o "y" se extraen por separado, y que las notas o aclaraciones entre paréntesis se ignoran, pero no la habilidad. Añade un caso al test del parser o de la plantilla con "PHP / Java (según tu caso)".
+2. Titular: mi CV pone "DESARROLLADOR WEB" y la IA añadió "Angular · TypeScript". Indica que el titular se toma literal del CV si existe (normalizando mayúsculas), sin añadir tecnologías.
+```
+
+*Resultado:* reglas nuevas en `cv-extraction.st` (habilidades agrupadas separadas, notas entre paréntesis ignoradas y titular literal). Con la IA real, el borrador pasó a 13 habilidades, con PHP y Java, y el titular dejó de inventar tecnologías. En la misma prueba, la API rechazó `temperature` para `claude-sonnet-5-5` y se quitó, y se descubrió que el `LLM_MODE` del `.env` gana al perfil `llm-live` (documentado en el readme, 1.4).
+
+*Ajuste humano:* el CV real solo se usó en local, con la clave en el `.env`. Los tests usan PDFs generados en memoria.
 
 ---
 
@@ -337,7 +415,7 @@ idempotente con ON CONFLICT DO NOTHING.
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 3) Validación del contrato OpenAPI. *En la Entrega 2 la sintaxis del YAML y los `$ref` se validaron con `openapi-spec-validator`, y cada ticket comprobó sus endpoints en Swagger UI.*
+**Prompt 2:** Validación del contrato OpenAPI. *No se ejecutó como prompt aparte. En la Entrega 2, la sintaxis del YAML y los `$ref` se validaron con `openapi-spec-validator`; cada ticket comprobó sus endpoints en Swagger UI y actualizó la sección 4 del readme cuando cambiaba el contrato. Al cerrar la Entrega 3 se comprobó que los 18 endpoints de la sección 4 coinciden con los controladores.*
 
 ```
 Valida este YAML OpenAPI 3.0.3 (sección 4 de mi readme.md): errores de sintaxis,
@@ -374,7 +452,7 @@ difiere | corrección propuesta.
 
 Siguiendo el consejo de la IA, marqué como `nullable` los campos de los schemas nuevos que admiten NULL en la base de datos. Al pasar `POST /offers` a devolver ofertas FALLIDA sin título, también marqué como `nullable` `OfferResponse.title` y `ApplicationResponse.offerTitle`, para no abrir una incoherencia nueva. Después apliqué también el diff de la sección 3 (ver sección 3 → Prompt 2), lo que resolvió además las filas 19 (ticket 1 alineado) y 21 (`CHECK (board_position >= 0)`). El resto de las filas 12–24 quedan **pendientes para antes de la Entrega 2**.
 
-**Seguimiento en la Entrega 2:**
+**Seguimiento en las Entregas 2 y 3:**
 
 | Filas | Cómo se resolvieron |
 |---|---|
@@ -382,7 +460,7 @@ Siguiendo el consejo de la IA, marqué como `nullable` los campos de los schemas
 | 13, 14 | JP-BE-05 (PR #8): salario con min/max nullable por separado y `work_mode NOT NULL DEFAULT 'DESCONOCIDO'` (migración V2). |
 | 15, 16, 17 | JP-BE-06 (PR #9): `summary NOT NULL`, `CHECK` de 3 a 5 sugerencias (migración V3) y Ejemplo 2 con los 6 resultados. |
 | 18, 20, 22 | Cierre de la Entrega 2: regla de `followUpOverdue` alineada con la HU-05, justificación de `profile_skills`/`experiences` y convención del `Clock` en `Europe/Madrid` en la sección 3.2. |
-| 24 | Pendiente (opcional): `llm_model` en `generated_documents`, con JP-BE-07. |
+| 24 | **No implementada** (era opcional): `generated_documents` no tiene `llm_model` ni en la migración ni en la entidad. JP-BE-07 no la incluyó. La trazabilidad del modelo queda solo en `match_analyses.llm_model`; anotado como deuda en la sección 8 del readme. |
 
 ---
 
@@ -390,7 +468,7 @@ Siguiendo el consejo de la IA, marqué como `nullable` los campos de los schemas
 
 **Prompt 1:** Generado dentro del Prompt 3 de la sección 1.
 
-**Prompt 2:** ⏳ (Entrega 3) Revisión INVEST
+**Prompt 2:** Revisión INVEST. *No se ejecutó como prompt aparte: los criterios de aceptación de cada historia se cubrieron con los tests de su ticket (fase 2 de `/ticket`, tests primero).*
 
 ```
 Actúa como Product Owner. Evalúa cada una de estas 5 historias de usuario con los
@@ -399,7 +477,7 @@ criterio de aceptación en Gherkin, dime si es verificable de forma automática 
 con qué tipo de test (unitario, integración o E2E).
 ```
 
-**Prompt 3:** ⏳ (Entrega 3) Casos límite que faltan
+**Prompt 3:** Casos límite que faltan. *No se ejecutó como prompt aparte: los casos límite salieron de las dudas de la fase 1 de cada ticket y quedaron cubiertos con tests (p. ej. la carrera del primer `PUT /profile` → 409, el conflicto de versiones en el tablero y en los documentos, o la transición prohibida bloqueada en el cliente).*
 
 ```
 Para la HU-03 (análisis de encaje) y la HU-05 (tablero), propón los escenarios
@@ -422,7 +500,7 @@ y al final de la Entrega 3 estén las 5 funcionalidades y la suite de tests. Dam
 plan por semanas con las dependencias entre tickets y señala el camino crítico.
 ```
 
-**Prompt 3:** Implementación guiada por ticket. **Workflow principal de la Entrega 2.**
+**Prompt 3:** Implementación guiada por ticket. **Workflow principal de las Entregas 2 y 3**, aplicado a los 18 tickets del backlog (PRs #1–#21).
 
 Esta plantilla se convirtió en el comando de Claude Code `.claude/commands/ticket.md`. Se lanza con `/ticket <ID>` y tiene 5 fases:
 1. **Especificación:** alcance, criterios de aceptación (deducidos de la historia de usuario si el ticket no tiene detalle), dependencias, plan de archivos, tests y dudas o incoherencias del readme. **Espera mi OK.**
@@ -431,7 +509,7 @@ Esta plantilla se convirtió en el comando de Claude Code `.claude/commands/tick
 4. **Verificación completa** (`mvnw verify`).
 5. **Resumen** con las decisiones propias de la IA, los cambios en el readme y una propuesta para este archivo.
 
-Proceso en cada ticket: reviso el plan con un segundo modelo (Claude en claude.ai), respondo a **todas** las dudas, exijo la **prueba real** con el perfil `dev` antes del commit y cierro con una PR hacia `main`.
+Proceso en cada ticket: reviso el plan y el resumen con un segundo modelo (Claude en claude.ai), respondo a **todas** las dudas, exijo la **prueba real** con el perfil `dev` o Docker Compose antes del commit y cierro con una PR hacia `main`. Una conversación por ticket: `/export` al terminar y `/clear` antes del siguiente.
 
 > **Cómo se tomó el criterio humano.** Revisé cada plan de Claude Code con un segundo modelo (Claude en claude.ai), que no escribía el código y actuaba como revisor: muchas de las correcciones de la columna "Mi criterio humano" surgieron de esa revisión. La decisión final de aceptarlas, cambiarlas o descartarlas fue siempre mía, y algunas salieron directamente de mis propias pruebas en el navegador (la CSP que bloqueaba el login y el error de URL que no se mostraba).
 
@@ -447,12 +525,20 @@ Proceso en cada ticket: reviso el plan con un segundo modelo (Claude en claude.a
 | **JP-BE-06** Análisis de encaje | #9 | `MatchScoreCalculator` con `BigDecimal` y redondeo exacto. Fake que asigna resultados por posición (los UUID cambian en cada ejecución). Decidió la regla "sin obligatorios → 100 % deseables" y pidió que la revisara. | Incluir las incoherencias 15–17 y JaCoCo (100 % en `analysis.domain`). No enviar al LLM nombre, email ni el texto del CV. Revisé y acepté la regla de negocio que propuso. |
 | **JP-FE-03** Dashboard, nueva oferta y detalle | #10 | Contador de caracteres igual que el backend, rangos de color con tests en los valores frontera y detalle básico para cerrar la HU-02. | Probándolo en el navegador encontré que una URL no válida bloqueaba el botón sin mostrar el error; ahora se valida al salir del campo, con tests. |
 | **JP-FE-04** Panel de análisis | #11 | Accesible: el resultado lleva texto e icono, no solo color. Conserva el análisis anterior si falla un recálculo. | Placeholder en `/perfil` en vez de una 404 para usuarios sin perfil. Avisar de que recalcular consume una consulta de IA. Capturas del análisis (85 y 42) para el readme. |
+| **JP-AI-01** Validación con el LLM real | #14 | `LlmLiveIT` fuera de `verify` y de la CI (`excludedGroups`), con un perfil Maven `-Pllm-live` que lee la clave del `.env` y salta los tests si no la hay. Capturas con la IA real para el readme. | Criterios flexibles (estructura y reglas, nunca texto exacto). Detecté que 3 tests de integración dependían del `LLM_MODE` de mi `.env`: ahora fijan `llm.mode=fake`. Proveedor: API de Anthropic con prepago sin recarga automática, y la clave solo en el `.env`. |
+| **JP-BE-08** API de candidaturas | #15 | `ApplicationStatusPolicy`, renumeración de las columnas en el servidor (`BoardColumn`) y bloqueo optimista con `@Version` (409 `version-conflict`). `FieldUpdate<T>` con un `ValueExtractor` para Bean Validation. | Acepté `FieldUpdate<T>` por cómo trata Jackson 3 los `Optional`. Añadí la regla de idioma a `CLAUDE.md` cuando la IA respondió en inglés después de compactar. |
+| **JP-FE-06** Tablero kanban | #16 | dnd-kit con ratón y teclado, actualización optimista con vuelta atrás, vista móvil con pestañas y "Mover a…", y panel lateral con React Hook Form + Zod. | Mis respuestas al menú se perdieron y la IA eligió la opción "más fiel a la spec": sin botón "Guardar en el tablero" y con las transiciones prohibidas validadas solo en el backend. Lo corregí: botón incluido y bloqueo en el cliente con *toast*, con el 409 como red de seguridad. *Lazy loading* para quitar el aviso de 500 kB. |
+| **JP-QA-01** E2E con Playwright | #17 | Proyecto `e2e/` con Playwright for Java y JUnit 6, `data-offer-id` en las tarjetas para no depender del título y trazas y capturas como artefacto si falla. | Arrastre con `mouse.down` / `move` / `up`, sin esperas fijas, revisar el límite de peticiones y ejecutar la suite varias veces seguidas (6 en verde). Seed de E2E en `db/e2e-seed/`. Modo visible con `slowMo` para el vídeo (ver sección 2.6 → Prompt 3). |
+| **JP-BE-04** Perfil desde el CV | #18 | Validación del PDF en memoria (tipo MIME, firma `%PDF`, 10 páginas) sin gastar cupo de IA, `max-tokens` 8.192 solo para el CV y un log por llamada solo con metadatos (tokens, motivo de parada). | La spec era contradictoria (guardar el texto del CV sin perfil): se resolvió con un borrador en memoria. 409 en la carrera del primer guardado en vez de deuda, límite de páginas y protección contra *prompt injection*. Prueba con mi CV real que corrigió la plantilla (ver sección 2.6 → Prompt 4); `temperature` quitada porque la API la rechaza; documentado que el `LLM_MODE` del `.env` gana al perfil `llm-live`. |
+| **JP-FE-02** Onboarding de perfil | #19 | Zona de arrastre accesible, validación del fichero en el cliente sin petición, listas editables con `useFieldArray` y confirmación dentro de la página al volver a subir un CV. Chunk `vendor-react` aparte para que ningún chunk pase de 500 kB. | El E2E empieza ya en el registro con un CV ficticio generado en memoria, nunca el CV real. |
+| **JP-BE-07** Carta, CV adaptado y PDF | #20 | Versionado con bloqueo optimista sobre `UNIQUE (offer_id, type, version)`, un validador de 200–500 palabras con el prompt pidiendo 250–400 y PDF con CommonMark (`escapeHtml`) y OpenHTMLtoPDF. | La IA no recibe el nombre: el servidor añade la firma, y pedí escapar el Markdown del nombre. PDF sin recursos externos, con tests que cuentan peticiones a un servidor local (0). Revisé los PDF reales generados: carta de 301 palabras, honesta con mi nivel de React. |
+| **JP-FE-05** Editor de documentos | #21 | Descarga del PDF con `fetch` + JWT y `blob` (nombre de `Content-Disposition`), pestañas accesibles con el teclado, aviso de conflicto de versiones con "Cargar la última versión" y E2E del flujo completo. | "Exportar PDF" desactivado con cambios sin guardar, en lugar de guardar automáticamente. Sin vista previa HTML, para no tener que sanear el Markdown. GitHub había desactivado Actions: verificación en local con los mismos pasos de `ci.yml`. |
 
 ---
 
 ## 7. Pull Requests
 
-> Desde la Entrega 2, cada ticket se cierra con una PR de su rama hacia `main` **dentro de mi repositorio**. No son la entrega, que es rama + Typeform. En la Entrega 2 hay 11 PRs (#1–#11), listadas en la sección 7 del readme; desde la #7 la CI tiene que estar en verde antes de fusionar.
+> Desde la Entrega 2, cada ticket se cierra con una PR de su rama hacia `main` **dentro de mi repositorio**. No son la entrega, que es rama + Typeform. Hay 21 PRs (#1–#11 en la Entrega 2 y #12–#21 en la Entrega 3), listadas en la sección 7 del readme. Desde la #7 la CI tiene que estar en verde antes de fusionar. GitHub desactivó Actions el 11/11/2026, así que la #20 y la #21 se fusionaron después de ejecutar en local los mismos pasos de `ci.yml`.
 
 **Prompt 1:** Descripción de la PR. *En la práctica la sustituye la fase 5 de `/ticket`: su resumen (qué se ha hecho, tests, decisiones y cambios en el readme) es la descripción de cada PR. El título es el mensaje del commit en Conventional Commits.* Ajuste humano: comprobar en cada PR que el destino es mi `main` y no el repositorio original de LIDR (es un fork), porque, al ser un fork, GitHub puede proponer el repositorio original como destino.
 
@@ -463,7 +549,7 @@ cómo probarlo en local, riesgos y checklist (tests, documentación, migraciones
 Título en formato Conventional Commits.
 ```
 
-**Prompt 2:** ⏳ (Entrega 3) Revisión independiente (subagente). *En la Entrega 2 este papel lo hizo la revisión de cada plan con Claude en claude.ai (un segundo modelo que no escribe el código).*
+**Prompt 2:** Revisión independiente (subagente). *No se usó un subagente. Este papel lo hizo, en las Entregas 2 y 3, la revisión del plan y del resumen de cada ticket con Claude en el chat del proyecto de claude.ai: un segundo modelo que no escribe el código.*
 
 ```
 Eres un revisor que no ha participado en el desarrollo. Revisa este diff contra los
@@ -472,10 +558,57 @@ filtran por userId, errores no manejados de LlmGateway, secretos o datos persona
 en los logs y código muerto. Devuelve solo los hallazgos, ordenados por gravedad.
 ```
 
-**Prompt 3:** ⏳ (Entrega 3) Actualización de la documentación tras la fusión
+**Prompt 3:** Actualización de la documentación tras la fusión. *No se ejecutó como prompt aparte: lo sustituyó la regla de `CLAUDE.md` de actualizar el readme en el mismo ticket cuando cambia el contrato, más la fase 5 de `/ticket`, que lista los cambios en el readme. La sección 7 del readme se completó al cerrar cada entrega.*
 
 ```
 Esta PR ya se ha fusionado. Actualiza las secciones del readme.md afectadas
 (modelo de datos, API, instrucciones de instalación) y añade la entrada
 correspondiente en la sección 7 con un resumen de la PR. No cambies nada más.
 ```
+
+**Prompt 4:** Cierre de la entrega: el readme fiel al código y verificación como revisor. **Workflow clave de la Entrega 3.** (Claude Code, Opus 5.5)
+
+Primer prompt literal (revisión del readme):
+
+```
+Vamos a cerrar la documentación de la Entrega 3 en la rama docs/cierre-entrega-3. Primero solo readme.md (prompts.md lo haremos después). Revisa readme.md de principio a fin contra el código real y déjalo fiel a lo construido:
+
+1. Estado de implementación (1.2): las 5 funcionalidades operativas (F1 perfil desde CV, F2 importar oferta, F3 análisis de encaje, F4 carta y CV adaptado con PDF, F5 tablero). Quita las notas tipo "se añadirá en la Entrega 3" que ya no apliquen; el vídeo déjalo como "pendiente de enlace" con un marcador VIDEO_URL que sustituiré.
+2. Arquitectura, stack y dependencias reales (PDFBox, CommonMark, OpenHTMLtoPDF, Playwright for Java, dnd-kit, etc.); el diagrama y los componentes deben coincidir con los módulos del código.
+3. Tickets (sección 6): marca el estado real de cada uno; los no hechos, como fuera de alcance o deuda.
+4. Credenciales de prueba y pasos de verificación para el revisor: requisitos, clonar, copiar .env.example a .env, docker compose up --build, usuario demo@jobpilot.dev / Demo1234!, recorrido sugerido de las 5 funcionalidades, cómo usar la IA real (LLM_MODE=real) y que sin clave todo funciona en modo fake. Indica exactamente qué valores de prueba poner en POSTGRES_USER, POSTGRES_PASSWORD y JWT_SECRET (con la longitud mínima que exige el backend), o un comando para generarlo, para que el revisor pueda arrancar sin adivinar.
+5. Cómo ejecutar los tests: backend (mvnw verify), frontend (npm test), E2E (stack e2e + mvnw test en e2e/, y modo visible).
+6. Nueva subsección sobre la CI: GitHub desactivó Actions en el repo el 11-nov-2026 ("GitHub Actions is currently disabled for this repository"); el soporte de cuenta gratuita no lo revisa. Hasta entonces las 41 ejecuciones pasaron en verde (captura docs/screenshots/github-actions-desactivado.png) y desde entonces se verifica en local con los mismos comandos de ci.yml (captura docs/screenshots/ci-local-verificacion.png). El workflow sigue en el repo y funcionará si se reactiva.
+7. Revisa que .env.example tenga todas las variables necesarias y sin valores secretos, y que no haya ningún secreto en el repo.
+8. Recuentos de tests actualizados y la deuda técnica consolidada en un solo sitio.
+
+Antes de editar, dame la lista de lo que vas a cambiar sección por sección y espera mi OK.
+```
+
+Segundo prompt literal (verificación como revisor), tras responder a sus dudas:
+
+```
+Adelante con las ediciones. Al terminar, haz el paso de revisor: sigue al pie de la letra la sección de instalación y verificación del readme desde cero, en una copia limpia del repo (git worktree o clon en una carpeta temporal fuera del repo), con un .env creado solo a partir de .env.example y las instrucciones del readme. Para el stack de dev antes (stop, sin -v) y vuelve a levantarlo al acabar. Dime si algún paso falla o es ambiguo y corrígelo. Borra la carpeta temporal al terminar. No hagas commit.
+```
+
+*Resultado:*
+
+- **Referencias inventadas o desfasadas corregidas:** `OwnershipIT` y `cover-letter.st` no existían; JUnit 5 → 6 (Jupiter 6.0.3, también en `CLAUDE.md`); faltaba Bucket4j en el stack.
+- **Cambios en el readme:**
+  - estado real de los 18 tickets con su PR;
+  - guía del revisor con valores de prueba exactos y comandos para generar el `JWT_SECRET` (mínimo 32 bytes);
+  - subsección sobre la CI desactivada;
+  - nueva sección 8 con toda la deuda técnica y lo fuera de alcance.
+- **Comprobaciones:** ningún secreto en el repositorio ni en su historial.
+- **Verificación desde un clon limpio de GitHub:**
+  - stack con Docker Compose, smoke test y recorrido de las 5 funcionalidades;
+  - `mvnw verify`: 437 + 279 tests;
+  - frontend: 262 tests, lint y build;
+  - E2E: 2/2, también en modo visible.
+
+  Todo en verde. Encontró dos instrucciones ambiguas, que se corrigieron: la empresa sale vacía en modo fake, y había que aclarar qué tarjeta mover en el tablero, porque había dos con el mismo puesto.
+
+*Ajuste humano:*
+
+- Antes del OK respondí a sus 4 dudas: JUnit 6 también en `CLAUDE.md`, valor fijo de ejemplo más comandos para el `JWT_SECRET`, captura de la CI recortada y despliegue fuera de alcance.
+- Pedí que la verificación se hiciera en una copia limpia, sin tocar los datos de mi stack de desarrollo.
