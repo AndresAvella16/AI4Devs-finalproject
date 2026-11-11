@@ -22,7 +22,6 @@ import com.jobpilot.shared.ratelimit.RateLimits;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -116,18 +115,8 @@ public class MatchAnalysisService {
 
     /** Solo el perfil estructurado: ni el texto en bruto del CV ni los datos de la cuenta (sección 2.5). */
     private ProfileSnapshot snapshot(Profile profile) {
-        return new ProfileSnapshot(profile.getHeadline(), profile.getSummary(), profile.getYearsExperience(),
-                profile.getLocation(),
-                map(skills.findByProfileIdOrdered(profile.getId()),
-                        skill -> new ProfileSnapshot.Skill(skill.getName(), skill.getLevel(), skill.getYears())),
-                map(experiences.findByProfileIdOrdered(profile.getId()),
-                        experience -> new ProfileSnapshot.ExperienceItem(experience.getCompany(), experience.getRole(),
-                                experience.getStartDate(), experience.getEndDate(), experience.getDescription())),
-                profile.getEducation(), profile.getLanguages());
-    }
-
-    private static <T, R> List<R> map(List<T> items, Function<T, R> mapper) {
-        return items.stream().map(mapper).toList();
+        return ProfileSnapshot.from(profile, skills.findByProfileIdOrdered(profile.getId()),
+                experiences.findByProfileIdOrdered(profile.getId()));
     }
 
     static ConflictException profileRequired() {

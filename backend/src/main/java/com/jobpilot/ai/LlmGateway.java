@@ -38,4 +38,12 @@ public interface LlmGateway {
      * aparece exactamente una vez. La puntuación no la da el modelo: la calcula {@code MatchScoreCalculator}.
      */
     MatchEvaluation evaluateMatch(ProfileSnapshot profile, List<RequirementSnapshot> requirements);
+
+    /**
+     * Genera una carta de presentación o un CV adaptado en Markdown (F4, JP-BE-07) a partir de la oferta, el perfil y
+     * el último análisis de encaje, que van al modelo como datos no confiables. La respuesta cumple
+     * {@link GeneratedDocumentContent} y {@link GeneratedDocumentValidator}. El modelo no recibe el nombre del
+     * usuario: la carta acaba en la despedida y la firma la añade el servidor.
+     */
+    GeneratedDocumentContent generateDocument(DocumentContext context);
 }

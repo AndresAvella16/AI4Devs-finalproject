@@ -23,6 +23,8 @@
         <spring-ai.version>2.0.2</spring-ai.version>
         <bucket4j.version>8.14.0</bucket4j.version>
         <pdfbox.version>3.0.8</pdfbox.version>
+        <commonmark.version>0.32.0</commonmark.version>
+        <openhtmltopdf.version>1.1.110</openhtmltopdf.version>
         <jacoco.version>0.8.14</jacoco.version>
     </properties>
 
@@ -85,6 +87,19 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!-- Exportación a PDF de la carta y el CV adaptado (JP-BE-07): solo la usa PdfRenderer.
+             openhtmltopdf de io.github es el fork mantenido; usa la misma versión de PDFBox que el lector del CV. -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>${commonmark.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.openhtmltopdf</groupId>
+            <artifactId>openhtmltopdf-pdfbox</artifactId>
+            <version>${openhtmltopdf.version}</version>
         </dependency>
 
         <!-- Persistencia -->

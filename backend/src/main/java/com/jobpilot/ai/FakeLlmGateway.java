@@ -1,6 +1,7 @@
 package com.jobpilot.ai;
 
 import com.jobpilot.analysis.domain.MatchResult;
+import com.jobpilot.document.domain.DocumentType;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -61,5 +62,15 @@ public class FakeLlmGateway implements LlmGateway {
 
         record Result(MatchResult result, String evidence) {
         }
+    }
+
+    /**
+     * Siempre la misma carta ({@code document-carta.json}) o el mismo CV adaptado ({@code document-cv-adaptado.json}),
+     * escritos para la oferta y el perfil fake. La carta acaba en "Atentamente," sin firma, como pide el prompt real.
+     */
+    @Override
+    public GeneratedDocumentContent generateDocument(DocumentContext context) {
+        String name = context.type() == DocumentType.CARTA ? "document-carta" : "document-cv-adaptado";
+        return responses.load(name, GeneratedDocumentContent.class);
     }
 }
