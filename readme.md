@@ -8,6 +8,7 @@
 5. [Historias de usuario](#5-historias-de-usuario)
 6. [Tickets de trabajo](#6-tickets-de-trabajo)
 7. [Pull requests](#7-pull-requests)
+8. [Deuda técnica y fuera de alcance](#8-deuda-técnica-y-fuera-de-alcance)
 
 ---
 
@@ -34,7 +35,13 @@ Stack: **Java 21 + Spring Boot 4** (API REST), **PostgreSQL**, **React + TypeScr
 
 ### **0.4. URL del proyecto:**
 
-> Sin despliegue público por ahora (es opcional en el máster; si se hace, se publicará aquí en la Entrega 3). **Evidencia de funcionamiento en la Entrega 2:** acceso al repositorio con credenciales de prueba y la app completa en local con un solo comando (`docker compose up --build`, ver 1.4), más las capturas de la sección 1.3. En la Entrega 3 se añadirá un **vídeo de 2–3 minutos** del flujo principal.
+> **Sin despliegue público:** es opcional en el máster y queda fuera de alcance (ver [sección 8](#8-deuda-técnica-y-fuera-de-alcance)).
+>
+> **Evidencia de funcionamiento:**
+>
+> - **Vídeo del flujo principal (2–3 min):** pendiente de enlace — VIDEO_URL
+> - **El repositorio**, que se arranca en local con un solo comando (`docker compose up --build`) y las **credenciales de prueba** `demo@jobpilot.dev` / `Demo1234!`. Los pasos para el revisor están en la [sección 1.4](#14-instrucciones-de-instalación).
+> - Las capturas de la [sección 1.3](#13-diseño-y-experiencia-de-usuario).
 
 ### 0.5. URL o archivo comprimido del repositorio
 
@@ -119,24 +126,28 @@ Si algún requisito obligatorio es `NO_CUMPLE`, el análisis muestra además el 
 - **Scraping de portales de empleo** (LinkedIn, InfoJobs…): sus condiciones de uso lo prohíben y el scraping es frágil. La URL de la oferta solo se guarda como referencia y el contenido se pega a mano.
 - **Envío automático de candidaturas**: el usuario sigue enviando su candidatura en el portal correspondiente; JobPilot prepara y registra.
 
-#### Estado de implementación (Entrega 2)
+#### Estado de implementación (Entrega 3 — final)
+
+Las cinco funcionalidades del MVP funcionan de extremo a extremo: navegador → React (nginx) → API Spring Boot → PostgreSQL, con la IA detrás del puerto `LlmGateway`.
 
 | # | Funcionalidad | Estado | Tickets |
 |---|---|---|---|
 | — | Registro e inicio de sesión (JWT) | ✅ Operativa | JP-BE-02, JP-FE-01 |
-| F2 | Importar oferta | ✅ Operativa de extremo a extremo | JP-BE-05, JP-FE-03 |
-| F3 | Análisis de encaje | ✅ Operativa de extremo a extremo | JP-BE-06, JP-FE-04 |
-| F1 | Perfil a partir del CV | ✅ Subida del CV, borrador con IA y guardado del perfil (JP-BE-04) y onboarding en `/perfil`: zona de arrastre, formulario editable y edición del perfil guardado (JP-FE-02) | JP-BE-04, JP-FE-02 |
-| F4 | Carta y CV adaptados | ✅ Operativa de extremo a extremo: en el detalle de la oferta, pestañas "Carta" y "CV adaptado" para generar con IA, editar (cada guardado es una versión nueva "Editada por mí"), ver el historial y exportar a PDF | JP-BE-07, JP-FE-05 |
-| F5 | Tablero de candidaturas | ✅ Operativa de extremo a extremo: "Guardar en el tablero" en el detalle de oferta (o "Ver en el tablero" si ya está) y kanban en `/tablero` con arrastre por ratón y teclado y pestañas con "Mover a…" en móvil | JP-BE-08, JP-FE-06 |
+| F1 | Perfil a partir del CV | ✅ Operativa: subida del PDF en `/perfil`, borrador extraído por la IA, formulario editable y edición posterior del perfil | JP-BE-04, JP-FE-02 |
+| F2 | Importar oferta | ✅ Operativa: texto pegado → datos y requisitos extraídos por la IA; si la IA falla, la oferta queda FALLIDA y se puede reintentar | JP-BE-05, JP-FE-03 |
+| F3 | Análisis de encaje | ✅ Operativa: clasificación de cada requisito por la IA, puntuación calculada en Java, aviso de bloqueante y sugerencias | JP-BE-06, JP-FE-04 |
+| F4 | Carta y CV adaptados con PDF | ✅ Operativa: pestañas "Carta" y "CV adaptado" en el detalle de la oferta para generar con IA, editar (cada guardado es una versión nueva "Editada por mí"), ver el historial y exportar a PDF | JP-BE-07, JP-FE-05 |
+| F5 | Tablero de candidaturas | ✅ Operativa: "Guardar en el tablero" desde el detalle de la oferta y kanban en `/tablero`, con arrastre por ratón y teclado, panel de notas y fechas, y pestañas con "Mover a…" en móvil | JP-BE-08, JP-FE-06 |
 
-**Flujo operativo:** navegador → React (nginx) → API Spring Boot → PostgreSQL, con la IA detrás del puerto `LlmGateway`.
+**No implementado:** los *should-have* S1 y S2 y el despliegue público, que es opcional. El detalle está en la [sección 8](#8-deuda-técnica-y-fuera-de-alcance).
 
-> **Sobre la IA en la Entrega 2.** La app funciona en modo `LLM_MODE=fake` (valor por defecto): `FakeLlmGateway` devuelve respuestas fijas (la extracción de la oferta del Ejemplo 1 de la sección 4 y su evaluación), así que el flujo completo es real (se guarda en la BD, Java calcula la puntuación, se muestra en el navegador) salvo la respuesta del modelo. La integración con Claude (`SpringAiLlmGateway`, `LLM_MODE=real`) está implementada y cubierta por tests con respuestas simuladas (`ScriptedChatModel`): prompts, validación, reintento y traducción de errores a 502/503/504. **La prueba contra la API real de Anthropic queda pendiente para la Entrega 3**, junto con la decisión de usar la API de Anthropic o un modelo local con Ollama (que gracias al puerto `LlmGateway` sería solo un adaptador más).
+> **Sobre la IA.** Por defecto la app funciona en modo `LLM_MODE=fake`: `FakeLlmGateway` devuelve respuestas fijas (`backend/src/main/resources/fake-llm/*.json`) para el CV, la oferta, el encaje, la carta y el CV adaptado. Así, todo el flujo es real (se guarda en la BD, Java calcula la puntuación y se ve en el navegador) menos la respuesta del modelo, y **se puede revisar sin API key**. Con `LLM_MODE=real` y una `ANTHROPIC_API_KEY`, `SpringAiLlmGateway` llama a Claude (por defecto `claude-sonnet-5-5`); se probó con la API real (capturas 06 y 07 de la sección 1.3). La validación automática con el modelo real es `LlmLiveIT` (JP-AI-01, ver 2.6).
 
 ### **1.3. Diseño y experiencia de usuario:**
 
-> Capturas con el usuario de prueba `demo@jobpilot.dev`, en modo `fake`, salvo las de la "Prueba con la IA real" (`LLM_MODE=real`). Las 01–07 son de la Entrega 2, la del tablero es de JP-FE-06, la del perfil, de JP-FE-02 (con una cuenta recién registrada y el CV procesado por el LLM fake) y la de la carta, de JP-FE-05. El vídeo del recorrido completo se añadirá en la Entrega 3.
+> Capturas con el usuario de prueba `demo@jobpilot.dev`, en modo `fake`, salvo las de la "Prueba con la IA real" (`LLM_MODE=real`). La del perfil es de una cuenta recién registrada, con el CV procesado por el LLM fake.
+>
+> **Vídeo del recorrido completo:** pendiente de enlace — VIDEO_URL
 
 **Inicio tras el login**
 
@@ -198,7 +209,7 @@ flowchart LR
     K --> L[Kanban de candidaturas]
 ```
 
-**Pantallas del producto** (implementadas en la Entrega 2: login/registro, dashboard, nueva oferta y detalle con el panel de análisis; el tablero, con JP-FE-06; el onboarding de perfil, con JP-FE-02; las pestañas "Carta" / "CV adaptado" del detalle, con JP-FE-05)
+**Pantallas del producto** (todas implementadas)
 
 | Pantalla | Contenido principal |
 |---|---|
@@ -215,16 +226,47 @@ flowchart LR
 
 ### **1.4. Instrucciones de instalación:**
 
-> Instrucciones verificadas en la Entrega 2 (Windows 10 con Docker Desktop y WSL 2; la CI las ejecuta en Linux en cada push). La forma recomendada de revisar el proyecto es la **opción A**.
+> **Guía para el revisor.** Instrucciones comprobadas desde cero en una copia limpia del repositorio, en Windows 10 con Docker Desktop (WSL 2). Basta con la **opción A**: no hace falta tener Java ni Node instalados, ni API key.
 
 #### Requisitos previos
 
-- **Java 21** (JDK) — el proyecto incluye Maven Wrapper (`./mvnw`), no hace falta instalar Maven.
-- **Node.js 20.19+** y npm (lo exige Vite 8).
-- **Docker** y **Docker Compose** (para PostgreSQL y para los tests de integración con Testcontainers).
-- Una **API key de Anthropic** (opcional: sin ella, la app puede arrancar en modo `fake` con respuestas simuladas del LLM).
+| Para… | Necesitas |
+|---|---|
+| Arrancar la app (opción A) | **Git** y **Docker Desktop** (o Docker Engine + Docker Compose v2), y los puertos **5173**, **8080** y **5432** libres |
+| Desarrollar en local (opción B) y ejecutar los tests | Además: **Java 21** (JDK; el proyecto trae Maven Wrapper, no hace falta instalar Maven) y **Node.js 20.19+** con npm (lo exige Vite 8) |
+| Usar la IA real (opcional) | Una **API key de Anthropic**. Sin ella todo funciona en modo `fake` |
 
-#### Variables de entorno (`.env.example`)
+#### Paso 1 — Clonar y crear el `.env`
+
+```bash
+git clone https://github.com/AndresAvella16/AI4Devs-finalproject.git
+cd AI4Devs-finalproject
+cp .env.example .env               # PowerShell: Copy-Item .env.example .env
+```
+
+`.env.example` trae todas las variables, con los secretos vacíos. Solo hay que **rellenar tres** en el `.env`; el resto de valores por defecto ya sirven:
+
+```dotenv
+# ⚠️ Valores SOLO para pruebas en local. Nunca los uses en un entorno real.
+POSTGRES_USER=jobpilot
+POSTGRES_PASSWORD=jobpilot_local_pass
+JWT_SECRET=jobpilot-local-review-secret-not-for-prod-2026
+```
+
+- **`JWT_SECRET` tiene que tener al menos 32 bytes** (256 bits, el mínimo de HS256). Si es más corto, el backend no arranca (`JwtConfig`); el de arriba tiene 46 caracteres. Si prefieres generar uno aleatorio (64 caracteres hexadecimales):
+
+  ```bash
+  openssl rand -hex 32
+  ```
+
+  ```powershell
+  $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | ForEach-Object { $_.ToString('x2') })
+  ```
+
+- `POSTGRES_USER` y `POSTGRES_PASSWORD` crean el usuario de la base de datos la **primera vez** que arranca el volumen `pgdata`. Si ya habías arrancado el proyecto con otras credenciales, bórralo antes con `docker compose down -v` (borra los datos locales).
+- No toques `LLM_MODE=fake`: con él la app funciona sin API key (ver "Usar la IA real" más abajo).
+
+Todas las variables de `.env.example`:
 
 ```dotenv
 # Base de datos
@@ -252,32 +294,32 @@ ANTHROPIC_MODEL=
 VITE_API_BASE_URL=/api/v1
 ```
 
-#### Opción A — Todo con Docker Compose
+#### Paso 2 — Opción A: todo con Docker Compose (recomendada)
 
 ```bash
-git clone https://github.com/AndresAvella16/AI4Devs-finalproject.git
-cd AI4Devs-finalproject
-cp .env.example .env        # rellenar al menos POSTGRES_USER, POSTGRES_PASSWORD y JWT_SECRET
-docker compose up --build
+docker compose up --build          # o "docker compose up -d --build --wait" para dejarlo en segundo plano
 ```
 
-Levanta tres servicios, cada uno cuando el anterior está *healthy*: `postgres` → `backend` (perfil `dev`, con migraciones y datos de prueba) → `frontend` (nginx). Dentro de Compose el backend se conecta a `postgres:5432`; el `DB_URL` de `.env` solo se usa al arrancar el backend con `mvnw`.
+La primera vez tarda unos minutos (descarga las imágenes y compila backend y frontend). Levanta tres servicios, cada uno cuando el anterior está *healthy*: `postgres` → `backend` (perfil `dev`: aplica las migraciones y carga los datos de prueba) → `frontend` (nginx). Dentro de Compose el backend se conecta a `postgres:5432`; el `DB_URL` del `.env` solo se usa al arrancar el backend con `mvnw` (opción B).
 
-> **`VITE_API_BASE_URL` se fija al construir la imagen del frontend, no al arrancarla.** Si lo cambias en `.env`, reconstruye con `docker compose up --build`. Con nginx tiene que ser la ruta relativa **`/api/v1`**: una URL absoluta (p. ej. `http://localhost:8080/api/v1`) apunta a otro origen, la CSP (`connect-src 'self'`) bloquea la llamada y el login falla con *"No se ha podido conectar con el servidor"*. `scripts/smoke-test.sh` lo detecta revisando el JS generado.
-
-- Frontend: http://localhost:5173
+- **Aplicación:** http://localhost:5173
 - API: http://localhost:8080/api/v1
 - Documentación interactiva de la API (Swagger UI): http://localhost:8080/swagger-ui.html
 
-#### Opción B — Desarrollo en local
+Para pararlo: `docker compose stop` (o `docker compose down`; con `-v` borra también la base de datos).
+
+> **`VITE_API_BASE_URL` se fija al construir la imagen del frontend, no al arrancarla.** Si lo cambias en `.env`, reconstruye con `docker compose up --build`. Con nginx tiene que ser la ruta relativa **`/api/v1`**: una URL absoluta (p. ej. `http://localhost:8080/api/v1`) apunta a otro origen, la CSP (`connect-src 'self'`) bloquea la llamada y el login falla con *"No se ha podido conectar con el servidor"*. `scripts/smoke-test.sh` lo detecta revisando el JS generado.
+
+#### Paso 2 — Opción B: desarrollo en local
 
 ```bash
 # 1. Base de datos
 docker compose up -d postgres
 
-# 2. Backend (aplica las migraciones Flyway y carga los datos de prueba en el perfil dev)
+# 2. Backend (aplica las migraciones Flyway y carga los datos de prueba en el perfil dev; lee el .env de la raíz)
 cd backend
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+# PowerShell: .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
 
 # 3. Frontend (en otra terminal)
 cd frontend
@@ -287,9 +329,35 @@ npm run dev
 
 El frontend llama siempre a la ruta relativa `/api/v1`. En desarrollo, el servidor de Vite (http://localhost:5173) reenvía `/api` al backend en `http://localhost:8080` (`server.proxy` en `frontend/vite.config.ts`), así que el navegador no hace peticiones de otro origen y no interviene CORS. En producción, nginx hace lo mismo.
 
+#### Paso 3 — Credenciales de prueba
+
+Con el perfil `dev` (opciones A y B) se carga `db/seed/R__demo_data.sql`: un usuario con perfil completo, tres ofertas ya analizadas (puntuaciones **42**, **68** y **85**) y tres candidaturas en el tablero (Guardada, Enviada con el seguimiento vencido y Entrevista).
+
+| Credenciales de prueba | |
+|---|---|
+| Email | `demo@jobpilot.dev` |
+| Contraseña | `Demo1234!` |
+
+> Son credenciales ficticias, solo para revisar el proyecto en local. Nunca se suben secretos reales al repositorio.
+
+#### Paso 4 — Recorrido sugerido por las 5 funcionalidades
+
+En modo `fake`, la IA devuelve siempre las mismas respuestas: el perfil de ejemplo, la oferta del Ejemplo 1 de la sección 4 (con cualquier texto que pegues) y su encaje de **85**.
+
+1. **Login** en http://localhost:5173 con `demo@jobpilot.dev` / `Demo1234!`. El dashboard ("Ofertas") muestra las tres ofertas del seed con su puntuación de color y el aviso de bloqueante en la de 42.
+2. **F1 — Perfil desde el CV.** En "Perfil" se ve el perfil guardado. Sube **cualquier PDF con texto** (de hasta 5 MB y 10 páginas; vale cualquier documento "imprimido a PDF" desde el navegador) arrastrándolo o con "Selecciona tu CV en PDF". Confirma "Sí, reemplazar": el formulario se rellena con lo que ha extraído la IA. Edita algún campo y pulsa "Guardar perfil". Con un fichero que no sea PDF verás "Solo se admiten PDF de hasta 5 MB."
+3. **F2 — Importar oferta.** "Ofertas" → "Nueva oferta". Pega un texto de al menos 200 caracteres, por ejemplo:
+
+   > Buscamos Desarrollador/a Java Junior para nuestro equipo de producto en Valencia (modelo híbrido, 2 días en oficina). Requisitos: experiencia de al menos 1 año con Java y Spring Boot, conocimientos de SQL y PostgreSQL, uso de Git. Se valorará: experiencia con React, Docker y nivel de inglés B2. Ofrecemos 24.000 - 28.000 € brutos anuales.
+
+   Pulsa "Analizar oferta": el detalle muestra el puesto (Desarrollador/a Java Junior), la ubicación (Valencia), la modalidad (híbrido), el salario (24.000–28.000 EUR) y los requisitos agrupados en obligatorios (3) y deseables (3). La empresa sale vacía porque el texto de ejemplo no la nombra (en modo fake, siempre).
+4. **F3 — Análisis de encaje.** En el detalle, "Calcular encaje": puntuación **85** (verde), cada requisito con Cumple / Parcial / No cumple y su evidencia, y las sugerencias. Para ver el aviso de requisito bloqueante, abre la oferta del seed con 42.
+5. **F4 — Carta y CV adaptado.** En el panel "Documentos" del mismo detalle, "Generar carta". Edita el texto, pulsa "Guardar cambios" (aparece la versión 2, "Editada por mí", en el historial) y "Exportar PDF" (se descarga `carta-v2.pdf`). La pestaña "CV adaptado" funciona igual ("Generar CV adaptado").
+6. **F5 — Tablero.** En el detalle, "Guardar en el tablero" y después "Ver en el tablero" (o "Tablero" en el menú). Arrastra la tarjeta nueva (Desarrollador/a Java Junior, 85, en "Guardada"; la del seed con el mismo puesto está en "Entrevista") a "Enviada" y recarga: sigue en "Enviada" y su fecha de envío es la de hoy. Si intentas un movimiento no permitido (p. ej. de "Entrevista" a "Guardada"), la tarjeta vuelve a su sitio con un aviso. Con el teclado: tabula hasta el asa ⠿ de una tarjeta, Espacio para cogerla, flechas para moverla y Espacio para soltarla. Al hacer clic en una tarjeta se abre el panel de notas y fechas. La tarjeta "Enviada" del seed muestra "Seguimiento pendiente".
+
 #### Usar la IA real (`LLM_MODE=real`)
 
-Por defecto la app usa respuestas fijas (`LLM_MODE=fake`). Para que llame a Claude, **cambia el `.env`**: es lo que manda, tanto en Docker Compose como con `mvnw spring-boot:run -Dspring-boot.run.profiles=dev`.
+**Sin API key todo funciona en modo `fake`** (el valor por defecto): es el modo con el que se revisa el proyecto, el que usan los tests y el único que admite el stack E2E. Para que la app llame a Claude, **cambia el `.env`**: es lo que manda, tanto en Docker Compose como con `mvnw spring-boot:run`.
 
 ```dotenv
 LLM_MODE=real
@@ -299,41 +367,55 @@ ANTHROPIC_MODEL=                  # vacío = claude-sonnet-5-5
 
 Después reinicia el backend: `docker compose up -d backend` (recrea el contenedor con el `.env` nuevo) o vuelve a lanzar `mvnw spring-boot:run`. Cuando termines, vuelve a poner `LLM_MODE=fake`.
 
-- **No uses el perfil de Spring `llm-live` para arrancar la app.** Solo existe en el classpath de test y es para `LlmLiveIT` (`-Pllm-live`, ver 2.6). Aunque se active, el `LLM_MODE=fake` del `.env` gana a su `llm.mode: real` y la app sigue en modo fake sin avisar (comprobado en JP-BE-04).
-- **Cómo comprobar que es la IA real:** con el perfil `dev`, cada llamada deja en el log una línea como `LLM 'cv-extraction' respondió en 9613 ms (intento 1/2; tokens entrada=3083 salida=1594 parada=end_turn)`. En modo fake no aparece, y las respuestas son siempre las mismas (la oferta del Ejemplo 1 y el perfil de los datos de prueba) y tardan milisegundos.
+- Con la IA real, cada llamada tarda varios segundos y el resultado depende del texto que subas o pegues. Hay un límite de 30 llamadas a la IA por hora y usuario (ver 2.5).
+- **No uses el perfil de Spring `llm-live` para arrancar la app.** Solo existe en el classpath de test y es para `LlmLiveIT` (`-Pllm-live`, ver 2.6). Aunque se active, el `LLM_MODE=fake` del `.env` gana a su `llm.mode: real` y la app sigue en modo fake sin avisar.
+- **Cómo comprobar que es la IA real:** con el perfil `dev`, cada llamada deja en el log del backend (`docker compose logs backend`) una línea como `LLM 'cv-extraction' respondió en 9613 ms (intento 1/2; tokens entrada=3083 salida=1594 parada=end_turn)`. En modo fake no aparece, y las respuestas son siempre las mismas y tardan milisegundos.
 - Si `LLM_MODE=real` y falta la clave, la app no arranca (`LlmModeEnvironmentPostProcessor`). Con el perfil `e2e`, `real` no se admite.
 
 #### Migraciones y datos de prueba (seed)
 
-- Las migraciones están en `backend/src/main/resources/db/migration` (Flyway) y se aplican automáticamente al arrancar.
-- Con el perfil `dev` se carga `db/seed/R__demo_data.sql`, que crea un usuario de prueba con perfil, tres ofertas analizadas y candidaturas en distintas columnas del tablero.
-
-| Credenciales de prueba | |
-|---|---|
-| Email | `demo@jobpilot.dev` |
-| Contraseña | `Demo1234!` |
-
-> Son credenciales ficticias, solo para revisar el proyecto en local. Nunca se suben secretos reales al repositorio.
+- Las migraciones están en `backend/src/main/resources/db/migration` (Flyway, `V1`–`V3`) y se aplican automáticamente al arrancar.
+- `db/seed/` (usuario `demo@jobpilot.dev`) solo se carga con el perfil `dev`; `db/e2e-seed/` (usuario `e2e@jobpilot.test`), solo con el perfil `e2e`; el perfil `prod` no carga ninguno.
 
 #### Ejecutar los tests
 
-```bash
-cd backend && ./mvnw verify                # unitarios + integración (Testcontainers)
-cd frontend && npm test                    # unitarios de componentes (Vitest)
-cd backend && ./mvnw verify -Pllm-live     # solo a mano: validación con el LLM real (JP-AI-01, ver 2.6)
+Requieren Java 21, Node 20.19+ y Docker en marcha (Testcontainers y el stack E2E).
 
-# E2E: stack aislado (proyecto jobpilot-e2e, perfil e2e, LLM_MODE=fake fijo, BD vacía en cada arranque).
-# Usa los puertos 5173 y 8080: para antes el stack de desarrollo (docker compose stop backend frontend).
-docker compose -f docker-compose.e2e.yml up -d --build --wait
-bash scripts/smoke-test.sh                 # smoke test HTTP (nginx, CSP, login)
-cd e2e && ./mvnw test                      # Playwright: flujo principal (JP-QA-01). En Windows: .\mvnw.cmd test
-cd e2e && ./mvnw test -Dheadless=false -DslowMo=600   # con el navegador visible y más lento (p. ej. para grabar un vídeo)
-docker compose -f docker-compose.e2e.yml down
+**Backend — unitarios + integración** (Testcontainers arranca un PostgreSQL 16 real; incluye la regla de cobertura de JaCoCo):
+
+```bash
+cd backend && ./mvnw verify               # PowerShell: cd backend; .\mvnw.cmd verify
 ```
 
-Por defecto, Playwright va sin ventana y sin pausas. `-Dheadless=false` abre Chromium y `-DslowMo=<ms>` hace una pausa después de cada acción (clic, escritura, recarga, cada `mouse.move`…; los pasos intermedios de un mismo `mouse.move` no llevan pausa, así que el arrastre se ve fluido). Medido en local: la suite pasa de ~32 s a ~38 s con 600 ms; para un vídeo más pausado, sube el valor (p. ej. 1200). Las esperas máximas crecen con el `slowMo`, así que no fallan por ir despacio. Las mismas opciones se pueden dar con las variables de entorno `E2E_HEADLESS` y `E2E_SLOW_MO`. En PowerShell, cada `-D` va entre comillas: `.\mvnw.cmd test "-Dheadless=false" "-DslowMo=600"`.
+**Frontend — lint, unitarios de componentes (Vitest) y build:**
 
-La CI (`.github/workflows/ci.yml`) ejecuta lo mismo en cada push y PR (ver 2.4).
+```bash
+cd frontend && npm ci && npm run lint && npm test && npm run build
+# PowerShell: cd frontend; npm ci; npm run lint; npm test; npm run build
+```
+
+**E2E — Playwright for Java contra el stack de `docker-compose.e2e.yml`** (proyecto `jobpilot-e2e`, perfil `e2e`, `LLM_MODE=fake` fijo y BD vacía en cada arranque; lee `POSTGRES_USER`, `POSTGRES_PASSWORD` y `JWT_SECRET` del mismo `.env`). Usa los puertos 5173 y 8080, así que antes hay que parar el stack de desarrollo (sin `-v`, para no borrar sus datos):
+
+```bash
+docker compose stop                                         # para el stack de desarrollo
+docker compose -f docker-compose.e2e.yml up -d --build --wait
+bash scripts/smoke-test.sh                                  # smoke test HTTP (nginx, CSP, login); en Windows, desde Git Bash
+cd e2e && ./mvnw test                                       # PowerShell: cd e2e; .\mvnw.cmd test
+cd e2e && ./mvnw test -Dheadless=false -DslowMo=600         # modo visible: abre Chromium y va más despacio
+#                                                             PowerShell: .\mvnw.cmd test "-Dheadless=false" "-DslowMo=600"
+docker compose -f docker-compose.e2e.yml down -v            # borra el stack E2E (no toca el de desarrollo)
+docker compose up -d                                        # vuelve a levantar el stack de desarrollo
+```
+
+La primera ejecución de Playwright descarga Chromium. Por defecto va sin ventana y sin pausas. `-Dheadless=false` abre Chromium y `-DslowMo=<ms>` hace una pausa después de cada acción (clic, escritura, recarga, cada `mouse.move`…; los pasos intermedios de un mismo `mouse.move` no llevan pausa, así que el arrastre se ve fluido). Medido en local: la suite pasa de ~32 s a ~38 s con 600 ms; para un vídeo más pausado, sube el valor (p. ej. 1200). Las esperas máximas crecen con el `slowMo`, así que no fallan por ir despacio. Las mismas opciones se pueden dar con las variables de entorno `E2E_HEADLESS` y `E2E_SLOW_MO`. En PowerShell, cada `-D` va entre comillas.
+
+**Validación con el LLM real** (solo a mano, gasta cupo de la API; ver 2.6):
+
+```bash
+cd backend && ./mvnw verify -Pllm-live    # sin ANTHROPIC_API_KEY los tests se saltan
+```
+
+Son los mismos pasos que la CI (`.github/workflows/ci.yml`, ver 2.4), que ahora se ejecutan en local porque GitHub Actions está desactivado en el repositorio (ver [Estado de la CI](#estado-de-la-ci-github-actions-desactivado)).
 
 ---
 
@@ -351,15 +433,15 @@ flowchart LR
 
     FE -- "HTTPS · JSON · JWT Bearer" --> API
 
-    subgraph BE["Backend · Spring Boot 4 · Java 21 (monolito modular)"]
-        SEC["Spring Security<br/>filtro JWT"] -.-> API
+    subgraph BE["Backend · Spring Boot 4.1 · Java 21 (monolito modular)"]
+        SEC["shared<br/>Spring Security (JWT) · límites Bucket4j<br/>errores ProblemDetail"] -.-> API
         API["Controladores REST<br/>+ validación DTO"] --> SVC["Servicios de dominio<br/>auth · profile · offer · analysis · document · tracker"]
         SVC --> REPO["Repositorios<br/>Spring Data JPA"]
         SVC --> PDFX["CvTextExtractor<br/>Apache PDFBox"]
         SVC --> PDFG["PdfRenderer<br/>OpenHTMLtoPDF"]
-        SVC --> PORT["LlmGateway<br/>(puerto / interfaz)"]
-        PORT --> REAL["SpringAiLlmGateway<br/>(adaptador real)"]
-        PORT --> FAKE["FakeLlmGateway<br/>(tests · e2e · modo fake)"]
+        SVC --> PORT["ai · LlmGateway<br/>(puerto / interfaz)"]
+        PORT --> REAL["SpringAiLlmGateway<br/>(adaptador real · Spring AI)"]
+        PORT --> FAKE["FakeLlmGateway<br/>(modo fake · tests · e2e)"]
     end
 
     REPO --> DB[("PostgreSQL 16<br/>migraciones Flyway")]
@@ -368,7 +450,7 @@ flowchart LR
 
 **Patrón elegido: monolito modular en capas + SPA desacoplada.**
 
-- El **backend** es un único despliegue de Spring Boot organizado **por funcionalidad** (*package-by-feature*): `auth`, `profile`, `offer`, `analysis`, `document`, `tracker`. Dentro de cada módulo se respetan las capas clásicas **Controller → Service → Repository**.
+- El **backend** es un único despliegue de Spring Boot organizado **por funcionalidad** (*package-by-feature*): `auth`, `profile`, `offer`, `analysis`, `document` y `tracker`, más dos módulos transversales: `ai` (el puerto `LlmGateway` y sus adaptadores) y `shared` (configuración, seguridad, límites de peticiones, validación y manejo de errores). Dentro de cada módulo de funcionalidad se respetan las capas clásicas **Controller → Service → Repository** (`web/`, `service/`, `domain/`, `repository/`).
 - La integración con la IA aplica una idea de la **arquitectura hexagonal** (puertos y adaptadores) solo donde aporta valor: los servicios dependen de la interfaz `LlmGateway`, no de Spring AI ni de Anthropic. Hay dos implementaciones: la real (`SpringAiLlmGateway`) y una simulada (`FakeLlmGateway`) que devuelve respuestas fijas.
 - El **frontend** es una SPA independiente que solo se comunica con la API REST.
 
@@ -407,16 +489,17 @@ flowchart LR
 | Capa | Tecnología | Motivo de la elección |
 |---|---|---|
 | Lenguaje backend | **Java 21** (LTS) | Es el lenguaje que domino; *records*, *pattern matching* y *virtual threads*. |
-| Framework backend | **Spring Boot 4** + Spring Security + Spring Data JPA | Estándar del mercado Java; Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026. |
+| Framework backend | **Spring Boot 4.1.2** (Spring Web MVC, Spring Security, Spring Data JPA, Bean Validation, Actuator) + springdoc-openapi 3.2 | Estándar del mercado Java; Spring Boot 3.5 dejó de tener soporte OSS en junio de 2026. |
 | Autenticación | **Spring Security OAuth2 Resource Server** (Nimbus JOSE + JWT) | Emite y valida los JWT HS256 con `JwtEncoder`/`JwtDecoder` de Spring, sin librerías JWT de terceros ni un filtro propio; compatible con el Jackson 3 de Spring Boot 4. |
 | Integración IA | **Spring AI 2.0.2** (`spring-ai-starter-model-anthropic`) con **Claude** — por defecto `claude-sonnet-5-5`, `max-tokens` 4096, configurable con `ANTHROPIC_MODEL` | Abstracción oficial de Spring para LLMs; Spring AI 2.0 requiere Spring Boot 4 (la 2.0.2 está compilada contra Boot 4.1.2). Sonnet es más barato y rápido que Opus y suficiente para extracción y encaje. |
 | Base de datos | **PostgreSQL 16** + **Flyway** | Relacional, ACID, JSONB para los campos semiestructurados y migraciones versionadas. |
 | Frontend | **React 19** + **TypeScript** + **Vite** | SPA moderna y tipada; React es lo más demandado junto a Java en las ofertas. |
-| UI / estado | Tailwind CSS 4 · TanStack Query 5 · React Router 7 · React Hook Form 7 + Zod 4 · dnd-kit | Productividad, caché del servidor, rutas protegidas, formularios validados y kanban accesible. |
+| UI / estado | Tailwind CSS 4 · TanStack Query 5 · React Router 7 · React Hook Form 7 + Zod 4 · dnd-kit (`core` 6, `sortable` 10) | Productividad, caché del servidor, rutas protegidas, formularios validados y kanban accesible. |
 | Herramientas frontend | Vite 8 · TypeScript 6.0 (`strict`) · ESLint 9 (typescript-eslint, react-hooks, jsx-a11y) · Vitest 5 + React Testing Library + MSW 2 | TypeScript 6.0 y ESLint 9 porque typescript-eslint aún no admite TypeScript 7 y jsx-a11y aún no admite ESLint 10. |
-| Documentos | Apache PDFBox (leer CV) · CommonMark + OpenHTMLtoPDF (generar PDF) | Librerías Java maduras y sin servicios externos. |
-| Tests | JUnit 5 · Mockito · AssertJ · Testcontainers · MockMvc · Vitest · React Testing Library · MSW · Playwright for Java | Cubren unitarios, integración y E2E con el mismo lenguaje en el backend y el E2E. |
-| Infraestructura | Docker · Docker Compose · GitHub Actions · Render (opcional) | Puesta en marcha en local con un comando, CI en cada push y despliegue sencillo. |
+| Documentos | Apache PDFBox 3.0 (leer el CV) · CommonMark 0.32 + OpenHTMLtoPDF 1.1 (Markdown → HTML → PDF) | Librerías Java maduras y sin servicios externos. |
+| Límites de uso | Bucket4j 8.14 | Límite de llamadas a la IA por usuario y de intentos de login, en memoria (ver 2.5). |
+| Tests | JUnit 6 (Jupiter 6.0.3) · Mockito · AssertJ · Testcontainers · MockMvc · JaCoCo · Vitest 5 · React Testing Library · MSW 2 · Playwright for Java 1.64 | Cubren unitarios, integración y E2E con el mismo lenguaje en el backend y el E2E. |
+| Infraestructura | Docker · Docker Compose · GitHub Actions (desactivado por GitHub, ver 2.4) · Dependabot | Puesta en marcha en local con un comando y CI en cada push. |
 
 
 | Componente | Tecnología | Responsabilidad |
@@ -436,8 +519,9 @@ flowchart LR
 | **Módulo `tracker`** | Spring Data JPA | Candidaturas, reglas de transición de estado (`ApplicationStatusPolicy`) e historial de cambios. |
 | **Módulo `ai`** | Spring AI (`ChatModel` + `BeanOutputConverter`) | Adaptador al modelo Claude. Plantillas de prompt versionadas en `resources/prompts/*.st` (con las reglas comunes en `_system-base.st`), conversión de la respuesta a `record` Java, validación del esquema y un reintento si la respuesta no es válida. `LLM_MODE` (`fake` por defecto, o `real`) elige el adaptador; en `real`, sin `ANTHROPIC_API_KEY` la app no arranca. Con el perfil `e2e`, `real` no se admite: la app no arranca aunque haya API key. Cada llamada puede cambiar `maxTokens` sobre la configuración general (`spring.ai.anthropic.chat.*`, 4.096 tokens): la extracción del CV usa 8.192, para que un CV largo no se corte; ofertas y análisis usan la general. No se envía `temperature`: `claude-sonnet-5-5` la rechaza con un 400 (*"`temperature` is deprecated for this model"*, comprobado en JP-BE-04). |
 | **Persistencia** | PostgreSQL 16, Spring Data JPA (Hibernate), Flyway | Modelo relacional, migraciones versionadas y datos de prueba. |
-| **Tests** | JUnit 5, Mockito, AssertJ, Testcontainers, MockMvc, Vitest, React Testing Library, MSW, Playwright for Java | Ver sección 2.6. |
-| **CI** | GitHub Actions | Build, tests y lint en cada push y PR. |
+| **Módulo `shared`** | Spring Security, Bucket4j, Bean Validation | Configuración (`Clock` de `Europe/Madrid`, OpenAPI, comprobación de variables obligatorias), seguridad JWT, límites de peticiones, validadores comunes y el `@RestControllerAdvice` único que devuelve `ProblemDetail`. |
+| **Tests** | JUnit 6, Mockito, AssertJ, Testcontainers, MockMvc, JaCoCo, Vitest, React Testing Library, MSW, Playwright for Java | Ver sección 2.6. |
+| **CI** | GitHub Actions | Build, tests y lint en cada push y PR (desactivado por GitHub desde el 11/11/2026; se verifica en local con los mismos pasos, ver 2.4). |
 
 ### **2.3. Descripción de alto nivel del proyecto y estructura de ficheros**
 
@@ -446,31 +530,34 @@ Monorepo con tres proyectos: `backend` (Maven), `frontend` (npm) y `e2e` (Maven 
 ```
 AI4Devs-finalproject/
 ├── backend/
-│   ├── pom.xml
+│   ├── pom.xml · mvnw · Dockerfile
 │   └── src/
 │       ├── main/
 │       │   ├── java/com/jobpilot/
 │       │   │   ├── JobPilotApplication.java
-│       │   │   ├── auth/            # registro, login, JWT (controller, service, dto)
-│       │   │   ├── profile/         # F1: perfil, habilidades, experiencias, CvTextExtractor
+│       │   │   ├── auth/            # registro, login, emisión del JWT
+│       │   │   ├── profile/         # F1: perfil, habilidades, experiencias, CvTextExtractor, CvDraftStore
 │       │   │   ├── offer/           # F2: ofertas y requisitos
 │       │   │   ├── analysis/        # F3: análisis de encaje, MatchScoreCalculator
-│       │   │   ├── document/        # F4: carta / CV adaptado, PdfRenderer
+│       │   │   ├── document/        # F4: carta / CV adaptado, versiones, PdfRenderer
 │       │   │   ├── tracker/         # F5: candidaturas, ApplicationStatusPolicy, historial
-│       │   │   ├── ai/              # LlmGateway (puerto), SpringAiLlmGateway, FakeLlmGateway
-│       │   │   └── shared/          # config, seguridad, manejo global de errores, auditoría
+│       │   │   │                    #     (cada uno con web/ · service/ · domain/ · repository/)
+│       │   │   ├── ai/              # LlmGateway (puerto), SpringAiLlmGateway, FakeLlmGateway, validadores
+│       │   │   └── shared/          # config, security, ratelimit, validation, web, error (GlobalExceptionHandler)
 │       │   └── resources/
 │       │       ├── application.yml  # + application-dev.yml, application-e2e.yml, application-prod.yml
-│       │       ├── db/migration/    # V1__init_schema.sql, V2__...
+│       │       ├── db/migration/    # V1__init_schema.sql, V2__work_mode_not_null.sql, V3__match_analyses_summary_suggestions.sql
 │       │       ├── db/seed/         # R__demo_data.sql (solo perfil dev)
-│       │       ├── prompts/         # _system-base.st, cv-extraction.st, offer-extraction.st, match.st, cover-letter.st
+│       │       ├── db/e2e-seed/     # R__e2e_data.sql (solo perfil e2e)
+│       │       ├── prompts/         # _system-base.st, cv-extraction.st, offer-extraction.st, match.st,
+│       │       │                    # document-carta.st, document-cv-adaptado.st
 │       │       └── fake-llm/        # respuestas fijas del modo fake (JSON), usadas en dev, tests y E2E
 │       └── test/
 │           ├── java/com/jobpilot/   # unitarios (*Test) e integración (*IT)
-│           └── resources/fixtures/  # CVs de ejemplo y variantes de respuesta solo para tests (JSON roto, campos que faltan…)
+│           └── resources/           # config de tests, respuestas y prompts solo para tests, fixtures/llm-live/ (LlmLiveIT)
 ├── frontend/
-│   ├── package.json
-│   ├── vite.config.ts
+│   ├── package.json · vite.config.ts · eslint.config.js
+│   ├── Dockerfile · nginx.conf      # build de Vite servido por nginx (cabeceras de seguridad y proxy /api/)
 │   └── src/
 │       ├── app/                     # router, providers, layout
 │       ├── api/                     # cliente HTTP (fetch + interceptor JWT) y tipos
@@ -483,8 +570,8 @@ AI4Devs-finalproject/
 │       │   └── tracker/             # tablero kanban
 │       ├── components/              # componentes UI reutilizables
 │       └── test/                    # setup de Vitest y handlers de MSW
-├── e2e/                             # tests E2E con Playwright for Java
-├── docs/                            # diagramas y capturas
+├── e2e/                             # tests E2E con Playwright for Java (pom.xml, mvnw, MainFlowE2ETest, RegistrationE2ETest)
+├── docs/screenshots/                # capturas de la app y de la CI
 ├── scripts/smoke-test.sh            # smoke test HTTP del stack de Compose (CI, job e2e)
 ├── .github/
 │   ├── workflows/ci.yml
@@ -521,23 +608,42 @@ flowchart LR
     P --> F1["frontend:<br/>npm ci · lint · test · build"]
     B1 --> E["e2e:<br/>docker-compose.e2e.yml (LLM_MODE=fake)<br/>smoke test · Playwright (JP-QA-01)"]
     F1 --> E
-    E --> D{"¿rama main?"}
-    D -- sí --> DEP["Deploy (opcional)<br/>Render: deploy hook"]
 ```
 
-- `backend` y `frontend` se ejecutan en paralelo; `e2e` solo si los dos pasan. El deploy aún no existe (Entrega 3).
+- `backend` y `frontend` se ejecutan en paralelo; `e2e` solo si los dos pasan. No hay job de despliegue (fuera de alcance, ver más abajo).
 - El job `e2e` genera en cada ejecución credenciales de un solo uso (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `JWT_SECRET`), comprueba que `docker-compose.e2e.yml` fija `LLM_MODE=fake` aunque el entorno diga `real`, levanta el stack con `--wait`, ejecuta `scripts/smoke-test.sh` y después la suite de Playwright (`e2e/`, JP-QA-01): instala Chromium con sus dependencias (`./mvnw exec:java -Dexec.args="install --with-deps chromium"`) y ejecuta `./mvnw test`. Si falla, sube como artefacto las trazas de Playwright y las capturas (`e2e/target/e2e-artifacts/`).
 - La CI no usa secretos del repositorio ni llama a la API de Anthropic.
 - Imágenes: `backend/Dockerfile` (Maven → `eclipse-temurin:21-jre`, usuario sin privilegios, *healthcheck* con `curl` contra `/actuator/health`; si la imagen base dejara de traer `curl`, se instala al construir) y `frontend/Dockerfile` (Node 22 → `nginx:1.28-alpine`; `nginx.conf` sirve la SPA, reenvía `/api/` al backend y añade las cabeceras de seguridad de 2.5).
 
-**Proceso de despliegue (opcional, previsto para la Entrega 3)**
+#### Estado de la CI: GitHub Actions desactivado
 
-1. Cada push o PR ejecuta el pipeline de CI. Si un test falla, no se despliega.
-2. En `main`, el backend se construye como imagen Docker (build multi-stage: Maven → JRE 21) y se despliega en **Render** como *Web Service*, conectado a un **PostgreSQL gestionado** de Render.
-3. El frontend se despliega con su imagen de nginx (`frontend/Dockerfile`), igual que en local: llama a la ruta relativa `/api/v1` y nginx la reenvía al backend, así que no hay CORS ni hace falta cambiar `VITE_API_BASE_URL`. *A revisar al desplegar* (Entrega 3): el `proxy_pass` de `nginx.conf` apunta a `backend:8080`, el nombre del servicio en Compose, y en Render habrá que apuntarlo a la URL interna del backend.
+El **11/11/2026** GitHub desactivó Actions en el repositorio. La pestaña *Actions* muestra *"GitHub Actions is currently disabled for this repository. Please reach out to GitHub Support for assistance."* y el soporte de las cuentas gratuitas no revisa el caso.
+
+- **Hasta entonces, las 41 ejecuciones del workflow `CI` terminaron en verde** (los tres jobs). La n.º 42, la del push de JP-BE-07, se quedó en cola y no llegó a ejecutarse.
+
+  ![GitHub Actions desactivado: 41 ejecuciones en verde y la 42 en cola](docs/screenshots/github-actions-desactivado.png)
+
+- **Desde entonces se verifica en local con los mismos pasos que `ci.yml`.** Son los de "Ejecutar los tests" de la sección 1.4:
+  - `backend`: `./mvnw -B -ntp verify`.
+  - `frontend`: `npm ci`, `lint`, `test` y `build`.
+  - `e2e`: credenciales de un solo uso, comprobación de que el stack fuerza `LLM_MODE=fake`, `docker compose -f docker-compose.e2e.yml up -d --build --wait`, smoke test, Playwright y `down -v`.
+
+  Así se fusionaron las PRs #20 (JP-BE-07) y #21 (JP-FE-05), con los tres jobs en verde a la primera:
+
+  ![Verificación local equivalente a ci.yml](docs/screenshots/ci-local-verificacion.png)
+
+- **El workflow sigue en el repositorio** (`.github/workflows/ci.yml`) sin cambios y volverá a ejecutarse en cada push y PR si GitHub reactiva Actions.
+
+**Despliegue: fuera de alcance**
+
+El despliegue público es opcional en el máster y no se ha hecho. La evidencia de funcionamiento es el vídeo del flujo principal (ver 0.4) y el repositorio, que se arranca en local con un solo comando, credenciales de prueba y pasos de verificación (sección 1.4). Si se desplegara, este era el diseño previsto:
+
+1. Solo se despliega si el pipeline de CI pasa.
+2. El backend se construye con su imagen Docker (build multi-stage: Maven → JRE 21) y se despliega en un PaaS (p. ej. **Render**, como *Web Service*) con un **PostgreSQL gestionado**.
+3. El frontend se despliega con su imagen de nginx (`frontend/Dockerfile`), igual que en local: llama a la ruta relativa `/api/v1` y nginx la reenvía al backend, así que no hay CORS ni hace falta cambiar `VITE_API_BASE_URL`. Habría que parametrizar el `proxy_pass` de `nginx.conf`, que apunta a `backend:8080` (el nombre del servicio en Compose).
 4. Las migraciones de Flyway se aplican solas al arrancar el backend.
-5. Los secretos (`JWT_SECRET`, `ANTHROPIC_API_KEY`, credenciales de la BD) se configuran como variables de entorno en Render y nunca se versionan.
-6. El endpoint `/actuator/health` se usa como *health check* del servicio.
+5. Los secretos (`JWT_SECRET`, `ANTHROPIC_API_KEY`, credenciales de la BD) se configuran como variables de entorno de la plataforma y nunca se versionan. El perfil `prod` no arranca si falta alguno (`RequiredEnvironmentCheck`) y no carga datos de prueba.
+6. El endpoint `/actuator/health` sirve como *health check* del servicio.
 
 ### **2.5. Seguridad**
 
@@ -563,23 +669,24 @@ flowchart LR
 
 La estrategia sigue la pirámide de tests y la recomendación del máster para sistemas con LLM: **los componentes que rodean al modelo se prueban de forma determinista con respuestas simuladas**, y las salidas reales del modelo se validan por estructura y reglas, no comparando el texto exacto.
 
-**Estado de la suite** (recuentos actualizados en JP-FE-05)
+**Estado de la suite** (recuentos del cierre de la Entrega 3, 11/11/2026: todo en verde, 0 fallos)
 
 | Capa | Herramientas | Tests | Notas |
 |---|---|---|---|
-| Backend: unitarios | JUnit 5, AssertJ, Mockito | 437 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores, límites de peticiones y el perfil (`CvTextExtractorTest` con PDFs generados en el test, `CvDraftStoreTest`, `CvExtractionParserTest`, `ProfileServiceTest`) y `AnthropicRequestOptionsTest`, que construye la petición con el `AnthropicChatModel` real (sin red) para comprobar que las opciones por llamada llegan a Anthropic. Documentos (JP-BE-07): `DocumentServiceTest`, `PdfRendererTest` (contenido, nombre en la cabecera y seguridad del PDF), `GeneratedDocumentValidatorTest` y `GeneratedDocumentParserTest`. |
+| Backend: unitarios | JUnit 6, AssertJ, Mockito | 437 | Incluye `MatchScoreCalculatorTest` (13 casos parametrizados), validadores de las respuestas del LLM, `StructuredLlmCall`, traducción de errores, límites de peticiones y el perfil (`CvTextExtractorTest` con PDFs generados en el test, `CvDraftStoreTest`, `CvExtractionParserTest`, `ProfileServiceTest`) y `AnthropicRequestOptionsTest`, que construye la petición con el `AnthropicChatModel` real (sin red) para comprobar que las opciones por llamada llegan a Anthropic. Documentos (JP-BE-07): `DocumentServiceTest`, `PdfRendererTest` (contenido, nombre en la cabecera y seguridad del PDF), `GeneratedDocumentValidatorTest` y `GeneratedDocumentParserTest`. |
 | Backend: integración | Spring Boot Test, Testcontainers (PostgreSQL 16), MockMvc | 279 | Migraciones y restricciones de la BD, auth/JWT, perfil, ofertas, análisis, documentos, propiedad de los datos (404 con recursos de otro usuario) y mapeo de errores de IA. |
 | Cobertura | JaCoCo | 100 % de líneas en `analysis.domain` | Regla `check` (≥ 90 %) en `mvnw verify`, como pide la definición de hecho de JP-BE-06. |
-| Frontend | Vitest, React Testing Library, MSW | 262 | Cliente API (también la subida multipart y la descarga de ficheros con `apiDownload`), sesión, formularios, dashboard, detalle, panel de análisis, onboarding del perfil (`ProfilePage.test.tsx`: subida, errores del fichero y de la IA, edición, guardado y confirmación al volver a subir; `schemas.test.ts` y `cvFile.test.ts` del perfil) y tablero: `canTransition`, helpers del tablero, schema del panel lateral, "Guardar en el tablero" (`SaveToBoard.test.tsx`, también con un 409) y `KanbanBoard.test.tsx`. Este último mueve tarjetas con el `KeyboardSensor` real de dnd-kit sobre un layout simulado, comprueba que una transición prohibida se bloquea sin llamar al backend y falla si hay errores o avisos en la consola. Documentos (JP-FE-05): `DocumentsPanel.test.tsx` (pestañas con el teclado, generar sin análisis y con errores de la IA, editar y guardar como versión nueva, validación, conflicto de versiones, confirmación al regenerar, exportar con el nombre del servidor y desactivado con cambios sin guardar, y que el contenido nunca se pinta como HTML) y el `schemas.test.ts` de documentos. |
+| Frontend | Vitest, React Testing Library, MSW | 262 (23 ficheros) | Cliente API (también la subida multipart y la descarga de ficheros con `apiDownload`), sesión, formularios, dashboard, detalle, panel de análisis, onboarding del perfil (`ProfilePage.test.tsx`: subida, errores del fichero y de la IA, edición, guardado y confirmación al volver a subir; `schemas.test.ts` y `cvFile.test.ts` del perfil) y tablero: `canTransition`, helpers del tablero, schema del panel lateral, "Guardar en el tablero" (`SaveToBoard.test.tsx`, también con un 409) y `KanbanBoard.test.tsx`. Este último mueve tarjetas con el `KeyboardSensor` real de dnd-kit sobre un layout simulado, comprueba que una transición prohibida se bloquea sin llamar al backend y falla si hay errores o avisos en la consola. Documentos (JP-FE-05): `DocumentsPanel.test.tsx` (pestañas con el teclado, generar sin análisis y con errores de la IA, editar y guardar como versión nueva, validación, conflicto de versiones, confirmación al regenerar, exportar con el nombre del servidor y desactivado con cambios sin guardar, y que el contenido nunca se pinta como HTML) y el `schemas.test.ts` de documentos. |
 | Stack completo | `scripts/smoke-test.sh` contra `docker-compose.e2e.yml` | Smoke test HTTP | Health, nginx (fallback de la SPA, CSP, proxy `/api`), login y comprobación de que el JS no lleva una URL absoluta de la API. |
 | E2E (JP-QA-01, JP-FE-02, JP-FE-05) | Playwright for Java + JUnit (`e2e/`) contra `docker-compose.e2e.yml` | 2 | Flujo principal completo (ver abajo), desde el registro y la subida del CV hasta la carta, el PDF y el tablero, y registro. |
-| CI | GitHub Actions | 3 jobs | `backend` y `frontend` en paralelo; `e2e` (smoke test + Playwright) si los dos pasan. |
+| Validación con el LLM real | `LlmLiveIT` (`@Tag("llm-live")`) | Fuera de `verify` | Solo a mano, con `-Pllm-live` y API key (ver abajo). |
+| CI | GitHub Actions | 3 jobs | `backend` y `frontend` en paralelo; `e2e` (smoke test + Playwright) si los dos pasan. GitHub Actions está desactivado desde el 11/11/2026: se ejecutan los mismos pasos en local (ver [Estado de la CI](#estado-de-la-ci-github-actions-desactivado)). |
 
 Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil `dev` o Docker Compose). Detectó problemas que los tests automáticos no veían: un `.env` mal formado, una URL de la API absoluta que la CSP bloqueaba, la IP del cliente falsificable a través de nginx y un error de validación de la URL que no se mostraba.
 
-**Previsto para la Entrega 3:** el E2E ya cubre el flujo principal completo, documentos incluidos (JP-FE-05). Los tests del perfil en el backend (`CvTextExtractorTest`, `ProfileControllerIT`) ya están hechos (JP-BE-04), y la subida del CV ya está en el E2E (JP-FE-02). El E2E con Playwright del flujo principal ya está hecho (JP-QA-01), con los pasos que existen hoy. Los tests del tablero en el backend (`ApplicationStatusPolicyTest`, `BoardColumnTest`, `ApplicationServiceTest`, `ApplicationControllerIT`) ya están hechos (JP-BE-08). La validación con el LLM real (`@Tag("llm-live")`) ya está hecha (JP-AI-01). La lista de abajo es el diseño completo de la suite.
+Todo lo que se describe a continuación está implementado.
 
-**Unitarios (JUnit 5 + Mockito + AssertJ / Vitest + React Testing Library)**
+**Unitarios (JUnit 6 + Mockito + AssertJ / Vitest + React Testing Library)**
 
 - `MatchScoreCalculatorTest`: tests parametrizados de la fórmula. Todo cumplido → 100; sin deseables → solo cuentan los obligatorios; mezcla de CUMPLE/PARCIAL/NO_CUMPLE → valor esperado; requisito obligatorio sin cumplir → aviso de bloqueante.
 - `ApplicationStatusPolicyTest`: transiciones permitidas (`GUARDADA→ENVIADA`, `ENTREVISTA→OFERTA`, `OFERTA→DESCARTADA`, cualquier estado → `DESCARTADA`, `DESCARTADA→GUARDADA`) y prohibidas (retrocesos como `OFERTA→GUARDADA` y saltos como `GUARDADA→OFERTA`).
@@ -595,7 +702,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 - `ProfileControllerIT` (JP-BE-04): subir un CV → 200 con el borrador y sin crear el perfil; no es PDF → 415, más de 5 MB, vacío o más de 10 páginas → 400, escaneado → 422, sin llamar a la IA ni gastar cupo; fallos de la IA → 502/503/504; un CV con instrucciones incrustadas → borrador válido; `PUT /profile` → 201 y después 200 (conserva el id, el CV y los análisis), con y sin borrador; validaciones → 400; carrera del primer `PUT` → 409. `CvDraftExpiryIT`: con el borrador caducado el perfil se guarda sin CV.
 - `AnalysisControllerIT`: análisis de punta a punta API → servicio → BD con una puntuación esperada exacta; usuario sin perfil → 409.
 - `DocumentControllerIT` (JP-BE-07): generar la carta → 201 en la versión 1, firmada por el servidor con el nombre del usuario (que la IA no recibe); regenerar → versión 2, con numeración propia por tipo; sin análisis → 409 `analysis-required` sin llamar a la IA; fallos de la IA → 502/503/504 sin guardar nada; historial con la última versión completa y las demás sin contenido; editar → versión nueva con `editedByUser: true`, y editar a partir de una versión que ya no es la última → 409 `document-version-conflict`; PDF descargable con el contenido y el nombre en la cabecera; documentos u ofertas de otro usuario → 404.
-- `OwnershipIT`: el usuario A no puede leer, analizar ni mover recursos del usuario B (→ 404).
+- **Propiedad de los datos:** cada `*ControllerIT` (`OfferControllerIT`, `AnalysisControllerIT`, `DocumentControllerIT`, `ProfileControllerIT`, `ApplicationControllerIT`) comprueba que el usuario A no puede leer, analizar, editar ni mover recursos del usuario B (→ 404).
 - `ApplicationControllerIT`: crear candidatura → 201 en GUARDADA con historial `from = NULL`, y crearla de nuevo para la misma oferta → 409; cambio de estado válido → 200 y se registra en el historial; mismo estado en `PATCH /status` → 400; transición no permitida → 409; `PATCH /applications/{id}` con una `version` antigua → 409.
 
 **E2E (Playwright for Java contra `docker-compose.e2e.yml` con `LLM_MODE=fake`)**
@@ -625,21 +732,7 @@ Además, en cada ticket se hizo una **prueba manual con el stack real** (perfil 
 
   El perfil Maven `llm-live` solo ejecuta ese grupo, y salta los unitarios y JaCoCo. Necesita Docker para el PostgreSQL de Testcontainers. La clave se lee de `ANTHROPIC_API_KEY`: de una variable de entorno o, si no está, del `.env` de la raíz (perfil de Spring `llm-live`, con `spring.config.import`, como el perfil `dev`). Así no hay que escribirla en la terminal ni queda en el historial. El test fuerza `llm.mode=real` (`@SpringBootTest(properties = ...)`), así que funciona aunque el `.env` diga `LLM_MODE=fake`; para usar la IA real en la app, ver "Usar la IA real" en 1.4. Si no hay clave, los tests aparecen como saltados y el build no falla. El modelo es el de `ANTHROPIC_MODEL` o, si está vacío, `claude-sonnet-5-5`.
 
-**Deuda técnica conocida**
-
-- **`save()` de Spring Data hace `merge` en las entidades nuevas.** Los UUID se asignan en el constructor, así que Spring Data no distingue una entidad nueva de una existente y ejecuta un `SELECT` antes de cada `INSERT`. Funciona, pero cuesta una consulta de más. Se resolverá con una clase base que implemente `Persistable` (JP-DB-01).
-- **JWT en `localStorage` (JP-FE-01).** La sesión (token, `expiresAt` y datos del usuario) se guarda en `localStorage` para que aguante las recargas y sirva en todas las pestañas, pero un XSS podría leer el token. Mitigaciones actuales: el token caduca a los 60 min (el frontend lo descarta al llegar a `expiresAt` y ante cualquier `401`), React escapa el contenido que pinta, no se usa `dangerouslySetInnerHTML` y nginx envía una CSP con `script-src 'self'` estricto (JP-OPS-01, ver 2.5). El Markdown que genera la IA no hay que sanearlo **por diseño** (JP-FE-05): el frontend lo edita y lo muestra como texto en un `<textarea>`, sin convertirlo nunca a HTML (lo comprueba `DocumentsPanel.test.tsx`); el único sitio donde se convierte es el PDF del backend, que ya lo trata como no fiable (ver 2.5).
-- **La sesión no se sincroniza entre pestañas (JP-FE-01).** El frontend no escucha el evento `storage`: si se cierra la sesión en una pestaña, las demás siguen mostrando la sesión hasta que su siguiente llamada a la API recibe un `401` (o hasta que llega `expiresAt`), y entonces vuelven a `/login`.
-- **Aviso moderado de `npm audit` en `minimatch` (JP-FE-01).** Llega como dependencia de typescript-eslint, que solo se usa al pasar el lint: no forma parte del bundle que se sirve al navegador. `npm audit fix --force` lo resolvería rebajando typescript-eslint a una versión antigua, así que se deja hasta que typescript-eslint actualice la dependencia.
-- **Límites de peticiones en memoria (JP-BE-05).** Los cubos de Bucket4j viven en la memoria del backend: valen para una sola instancia (el despliegue previsto) y se reinician al reiniciarlo. Con varias instancias habría que pasarlos a un almacén compartido (Bucket4j tiene integración con Redis o PostgreSQL). Para acotar la memoria, al llegar a `jobpilot.rate-limit.max-keys` claves se olvidan las que tienen el cupo lleno.
-- **Borrador del CV en memoria (JP-BE-04).** El texto de un CV subido con `POST /profile/cv` espera en la memoria del backend (`CvDraftStore`, 30 min, como mucho `jobpilot.cv-draft.max-entries` borradores) hasta el `PUT /profile`. Como los cubos de Bucket4j, vale para una sola instancia y se pierde al reiniciar; si se pierde o caduca, el perfil se guarda igualmente, sin `cv_raw_text` ni `cv_file_name`. Con varias instancias habría que pasarlo a una tabla o a Redis.
-- **Proxies de confianza para `X-Forwarded-For` (JP-BE-05).** Tomcat da por internas las IPs privadas (10/8, 172.16/12, 192.168/16, 127/8…). En local, el puerto 8080 del backend también está publicado y las peticiones del host llegan desde la puerta de enlace de Docker (172.x), así que quien llame directamente a `:8080` puede falsear su IP. Por nginx (`:5173`) no, porque nginx sustituye la cabecera. Al desplegar en Render hay que ajustar `server.tomcat.remoteip.internal-proxies` al proxy de la plataforma y no publicar el backend.
-- **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
-- **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. En JP-QA-01 se decidió no cambiarlos: antes de los E2E hay que parar el stack de desarrollo (`docker compose stop backend frontend`). Si molesta, se pueden mover a otros puertos sin tocar los tests: el smoke test los lee de `FRONTEND_URL` y `BACKEND_URL`, y Playwright, de `FRONTEND_URL`.
-- **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; para desplegar en Render habrá que parametrizarlo (ver 2.4).
-- **La carga inicial del frontend ronda los 500 kB (JP-FE-04 → JP-FE-02).** Antes era un único chunk de 504,6 kB (155,1 kB con gzip) y `npm run build` avisaba. Desde JP-FE-06, el tablero, el detalle de oferta y la nueva oferta se cargan con `lazy` de React Router, cada uno con un `HydrateFallback`, y desde JP-FE-02 también el perfil (19,9 kB; 6,3 kB con gzip). Con JP-FE-02 el chunk inicial llegaba a 501,4 kB (lo nuevo es el cliente del perfil y el aviso "Crea tu perfil" del dashboard) y volvía el aviso, así que React, React DOM y React Router van ahora en su propio chunk (`vendor-react`, con `build.rolldownOptions.output.codeSplitting` en `vite.config.ts`): `index` 190,3 kB (57,9 kB con gzip) + `vendor-react` 310,3 kB (98,0 kB con gzip) + `rolldown-runtime` 0,6 kB. **La primera carga sigue siendo de ~501 kB (~156 kB con gzip)**; lo que se gana es que ningún chunk pasa de 500 kB y que el de React, que cambia poco, se queda en la caché del navegador entre despliegues. Si la carga inicial sigue creciendo, lo siguiente es sacar del chunk inicial lo que solo usan algunas páginas (Zod y React Hook Form los usan el login y el registro).
-- **La carta gasta ~2.100 tokens de salida (JP-BE-07), unas 3 veces lo esperado.** En la prueba con la IA real (Claude Sonnet 5.5), una carta de 301 palabras costó 2.666 tokens de entrada y 2.099 de salida (`end_turn`, al primer intento), cuando ~300 palabras en español deberían rondar los 600–700. El CV adaptado, en cambio, gastó lo razonable (652 de salida para 171 palabras). La causa está pendiente de investigar: el contenido de las respuestas no se registra a propósito (datos personales), así que habrá que reproducirlo en un test `llm-live` que mida la longitud de la respuesta en bruto frente a los tokens.
-- **Fuentes estándar en el PDF (JP-BE-07).** El PDF usa las fuentes base de PDF (Helvetica), que cubren el español, el inglés y "€". Los caracteres que no cubren (emojis, alfabetos no latinos) salen como `#`. Se resolverá incrustando una fuente TTF libre (p. ej. DejaVu Sans o Noto Sans) con `useFont` de OpenHTMLtoPDF.
+**Deuda técnica:** consolidada en la [sección 8](#8-deuda-técnica-y-fuera-de-alcance).
 
 ---
 
@@ -1770,34 +1863,37 @@ Escenario: Seguimiento vencido
 
 ## 6. Tickets de Trabajo
 
-**Backlog del MVP (vista general)**
+**Backlog del MVP (vista general y estado final)**
 
-| ID | Tipo | Título | HU | SP |
-|---|---|---|---|---|
-| JP-DB-01 | Base de datos | Esquema inicial con Flyway y datos de prueba | Todas | 3 |
-| JP-BE-01 | Backend | Scaffolding Spring Boot, configuración, manejo global de errores | — | 2 |
-| JP-BE-02 | Backend | Registro, login y filtro JWT | — | 3 |
-| JP-BE-03 | Backend | Puerto `LlmGateway`, adaptador Spring AI y `FakeLlmGateway` | 1–4 | 3 |
-| JP-BE-04 | Backend | Subida de CV y extracción de perfil | HU-01 | 5 |
-| JP-BE-05 | Backend | Importación de ofertas y extracción de requisitos + límite de peticiones (Bucket4j: IA y login, ver 2.5) | HU-02 | 3 |
-| **JP-BE-06** | **Backend** | **Análisis de encaje: `MatchScoreCalculator` y endpoint** | HU-03 | 5 |
-| JP-BE-07 | Backend | Generación, versionado y exportación PDF de documentos | HU-04 | 5 |
-| JP-BE-08 | Backend | API de candidaturas y política de transiciones | HU-05 | 3 |
-| JP-FE-01 | Frontend | Scaffolding Vite + React, router, cliente API, auth | — | 3 |
-| JP-FE-02 | Frontend | Onboarding: subida de CV y formulario de perfil | HU-01 | 5 |
-| JP-FE-03 | Frontend | Dashboard y formulario de nueva oferta | HU-02 | 3 |
-| JP-FE-04 | Frontend | Detalle de oferta y panel de análisis | HU-03 | 5 |
-| JP-FE-05 | Frontend | Editor de documentos y exportación | HU-04 | 3 |
-| **JP-FE-06** | **Frontend** | **Tablero kanban de candidaturas** | HU-05 | 5 |
-| JP-QA-01 | Tests | Suite E2E del flujo principal con Playwright | Todas | 3 |
-| JP-OPS-01 | DevOps | Docker Compose y pipeline de CI en GitHub Actions | — | 3 |
-| JP-AI-01 | Tests | Validación con el LLM real (`@Tag("llm-live")`, fuera de la CI) | HU-02, HU-03 | 2 |
+Los 18 tickets del backlog están hechos y fusionados en `main`. Lo que queda fuera (S1, S2, despliegue) y la deuda técnica están en la [sección 8](#8-deuda-técnica-y-fuera-de-alcance).
+
+| ID | Tipo | Título | HU | SP | Estado |
+|---|---|---|---|---|---|
+| JP-DB-01 | Base de datos | Esquema inicial con Flyway y datos de prueba | Todas | 3 | ✅ Hecho (PR #2) |
+| JP-BE-01 | Backend | Scaffolding Spring Boot, configuración, manejo global de errores | — | 2 | ✅ Hecho (PR #1) |
+| JP-BE-02 | Backend | Registro, login y filtro JWT | — | 3 | ✅ Hecho (PR #3) |
+| JP-BE-03 | Backend | Puerto `LlmGateway`, adaptador Spring AI y `FakeLlmGateway` | 1–4 | 3 | ✅ Hecho (PR #4) |
+| JP-BE-04 | Backend | Subida de CV y extracción de perfil | HU-01 | 5 | ✅ Hecho (PR #18) |
+| JP-BE-05 | Backend | Importación de ofertas y extracción de requisitos + límite de peticiones (Bucket4j: IA y login, ver 2.5) | HU-02 | 3 | ✅ Hecho (PR #8) |
+| **JP-BE-06** | **Backend** | **Análisis de encaje: `MatchScoreCalculator` y endpoint** | HU-03 | 5 | ✅ Hecho (PR #9) |
+| JP-BE-07 | Backend | Generación, versionado y exportación PDF de documentos | HU-04 | 5 | ✅ Hecho (PR #20) |
+| JP-BE-08 | Backend | API de candidaturas y política de transiciones | HU-05 | 3 | ✅ Hecho (PR #15) |
+| JP-FE-01 | Frontend | Scaffolding Vite + React, router, cliente API, auth | — | 3 | ✅ Hecho (PR #6) |
+| JP-FE-02 | Frontend | Onboarding: subida de CV y formulario de perfil | HU-01 | 5 | ✅ Hecho (PR #19) |
+| JP-FE-03 | Frontend | Dashboard y formulario de nueva oferta | HU-02 | 3 | ✅ Hecho (PR #10) |
+| JP-FE-04 | Frontend | Detalle de oferta y panel de análisis | HU-03 | 5 | ✅ Hecho (PR #11) |
+| JP-FE-05 | Frontend | Editor de documentos y exportación | HU-04 | 3 | ✅ Hecho (PR #21) |
+| **JP-FE-06** | **Frontend** | **Tablero kanban de candidaturas** | HU-05 | 5 | ✅ Hecho (PR #16) |
+| JP-QA-01 | Tests | Suite E2E del flujo principal con Playwright | Todas | 3 | ✅ Hecho (PR #17) |
+| JP-OPS-01 | DevOps | Docker Compose y pipeline de CI en GitHub Actions | — | 3 | ✅ Hecho (PR #7); el deploy opcional, fuera de alcance |
+| JP-AI-01 | Tests | Validación con el LLM real (`@Tag("llm-live")`, fuera de la CI) | HU-02, HU-03 | 2 | ✅ Hecho (PR #14) |
 
 A continuación se detallan los tres tickets representativos que pide la plantilla: uno de base de datos, uno de backend y uno de frontend.
 
 ### Ticket 1 — JP-DB-01: Esquema inicial de base de datos con Flyway y datos de prueba
 
-**Tipo:** Base de datos · **Prioridad:** Alta (bloquea al resto de tickets de backend) · **Estimación:** 3 SP · **Historias:** todas
+**Tipo:** Base de datos · **Prioridad:** Alta (bloquea al resto de tickets de backend) · **Estimación:** 3 SP · **Historias:** todas  
+**Estado:** ✅ Hecho — PR #2
 
 **Descripción**
 Crear la migración inicial de Flyway con todas las tablas del modelo de datos (sección 3) y un script de datos de prueba que solo se cargue en el perfil `dev`, para que el proyecto se pueda revisar en local con datos realistas.
@@ -1823,12 +1919,12 @@ Crear la migración inicial de Flyway con todas las tablas del modelo de datos (
 
 **Criterios de aceptación**
 
-- [ ] `./mvnw spring-boot:run` contra una BD vacía crea el esquema sin errores y Hibernate lo valida.
-- [ ] Con el perfil `dev`, se puede iniciar sesión con las credenciales de prueba y el tablero muestra 3 candidaturas.
-- [ ] Falla por restricción: insertar un email con mayúsculas o duplicado, una puntuación de 101, un estado no válido, un salario sin moneda, una candidatura ENVIADA sin `applied_at` o un historial con el mismo estado de origen y destino.
-- [ ] Falla por FK compuesta: un `requirement_match` cuyo requisito es de otra oferta, o una candidatura cuyo `user_id` no es el propietario de la oferta.
-- [ ] Borrar un usuario elimina en cascada su perfil, ofertas, análisis, documentos y candidaturas.
-- [ ] El perfil `prod` no carga los datos de prueba.
+- [x] `./mvnw spring-boot:run` contra una BD vacía crea el esquema sin errores y Hibernate lo valida.
+- [x] Con el perfil `dev`, se puede iniciar sesión con las credenciales de prueba y el tablero muestra 3 candidaturas.
+- [x] Falla por restricción: insertar un email con mayúsculas o duplicado, una puntuación de 101, un estado no válido, un salario sin moneda, una candidatura ENVIADA sin `applied_at` o un historial con el mismo estado de origen y destino.
+- [x] Falla por FK compuesta: un `requirement_match` cuyo requisito es de otra oferta, o una candidatura cuyo `user_id` no es el propietario de la oferta.
+- [x] Borrar un usuario elimina en cascada su perfil, ofertas, análisis, documentos y candidaturas.
+- [x] El perfil `prod` no carga los datos de prueba.
 
 **Tests**
 
@@ -1836,12 +1932,13 @@ Crear la migración inicial de Flyway con todas las tablas del modelo de datos (
 - `ConstraintsIT`: un caso por restricción crítica, incluidos los dos de FK compuesta (se espera `DataIntegrityViolationException`).
 - `CascadeDeleteIT`: borra un usuario y comprueba que quedan 0 filas relacionadas.
 
-**Definición de hecho:** migraciones revisadas, tests en verde en la CI, diagrama de la sección 3 actualizado si ha cambiado algo, PR aprobado.
+**Definición de hecho:** migraciones revisadas, tests en verde en la CI (o, desde que GitHub desactivó Actions, en la verificación local equivalente, ver 2.4), diagrama de la sección 3 actualizado si ha cambiado algo, PR aprobado.
 
 ### Ticket 2 — JP-BE-06: Análisis de encaje (`MatchScoreCalculator` y `POST /offers/{offerId}/analysis`)
 
 **Tipo:** Backend · **Prioridad:** Alta (núcleo del producto) · **Estimación:** 5 SP · **Historia:** HU-03
-**Dependencias:** JP-DB-01, JP-BE-03 (`LlmGateway`), JP-BE-04 (perfil), JP-BE-05 (ofertas)
+**Dependencias:** JP-DB-01, JP-BE-03 (`LlmGateway`), JP-BE-04 (perfil), JP-BE-05 (ofertas)  
+**Estado:** ✅ Hecho — PR #9
 
 **Descripción**
 Implementar el análisis de encaje entre el perfil del usuario y una oferta. El LLM clasifica cada requisito (CUMPLE / PARCIAL / NO_CUMPLE) con su evidencia y propone sugerencias; la puntuación se calcula en Java de forma determinista.
@@ -1872,13 +1969,13 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
 
 **Criterios de aceptación**
 
-- [ ] Con 3 obligatorios CUMPLE y deseables PARCIAL, NO_CUMPLE y CUMPLE, la respuesta tiene `score = 85` y `hasBlockingGap = false`.
-- [ ] Con un obligatorio NO_CUMPLE, `hasBlockingGap = true`.
-- [ ] Un usuario no puede analizar ofertas de otro (404).
-- [ ] Sin perfil → 409 con `type` `.../profile-required`.
-- [ ] Una respuesta del LLM no válida dos veces seguidas → 502 y no se guarda nada.
-- [ ] Timeout del LLM → 504; concurrencia agotada → 503 con cabecera `Retry-After`.
-- [ ] El endpoint aparece documentado en Swagger UI.
+- [x] Con 3 obligatorios CUMPLE y deseables PARCIAL, NO_CUMPLE y CUMPLE, la respuesta tiene `score = 85` y `hasBlockingGap = false`.
+- [x] Con un obligatorio NO_CUMPLE, `hasBlockingGap = true`.
+- [x] Un usuario no puede analizar ofertas de otro (404).
+- [x] Sin perfil → 409 con `type` `.../profile-required`.
+- [x] Una respuesta del LLM no válida dos veces seguidas → 502 y no se guarda nada.
+- [x] Timeout del LLM → 504; concurrencia agotada → 503 con cabecera `Retry-After`.
+- [x] El endpoint aparece documentado en Swagger UI.
 
 **Tests**
 
@@ -1888,12 +1985,13 @@ Implementar el análisis de encaje entre el perfil del usuario y una oferta. El 
 - `MatchAnalysisServiceTest` (Mockito): orquestación, orden de las comprobaciones (404 → 409), no se llama al LLM ni se gasta cupo si no hay perfil, y no se guarda nada si el LLM falla.
 - `AnalysisControllerIT` (Testcontainers + MockMvc + `FakeLlmGateway`): 201 / 401 / 404 / 409.
 
-**Definición de hecho:** cobertura ≥ 90 % en `analysis.domain` (la comprueba JaCoCo en `mvnw verify`: `jacoco:check` sobre las líneas de ese paquete, con los unitarios y los IT; informe en `backend/target/site/jacoco/index.html`), tests en verde en la CI, contrato OpenAPI actualizado, PR revisado.
+**Definición de hecho:** cobertura ≥ 90 % en `analysis.domain` (la comprueba JaCoCo en `mvnw verify`: `jacoco:check` sobre las líneas de ese paquete, con los unitarios y los IT; informe en `backend/target/site/jacoco/index.html`), tests en verde en la CI (o, desde que GitHub desactivó Actions, en la verificación local equivalente, ver 2.4), contrato OpenAPI actualizado, PR revisado.
 
 ### Ticket 3 — JP-FE-06: Tablero kanban de candidaturas
 
 **Tipo:** Frontend · **Prioridad:** Alta · **Estimación:** 5 SP · **Historia:** HU-05
-**Dependencias:** JP-FE-01 (cliente API y auth), JP-BE-08 (API de candidaturas)
+**Dependencias:** JP-FE-01 (cliente API y auth), JP-BE-08 (API de candidaturas)  
+**Estado:** ✅ Hecho — PR #16
 
 **Descripción**
 Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la posibilidad de moverlas arrastrando (y con el teclado), con actualización optimista y vuelta atrás si el backend rechaza el cambio.
@@ -1917,13 +2015,13 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 
 **Criterios de aceptación**
 
-- [ ] Se ven 5 columnas con su contador y las tarjetas ordenadas por `boardPosition`.
-- [ ] Al arrastrar de Guardada a Enviada, la tarjeta cambia de columna al instante y el cambio se mantiene al recargar.
-- [ ] Al reordenar dentro de una columna se llama a `PATCH /applications/{id}` (no a `/status`) y no se crea ninguna entrada en el historial.
-- [ ] Si el backend responde 409, la tarjeta vuelve a su sitio y aparece un *toast* con el `detail` del error.
-- [ ] Se puede mover una tarjeta solo con el teclado (Espacio para cogerla, flechas para moverla, Espacio para soltarla).
-- [ ] Las tarjetas con seguimiento vencido muestran el indicador.
-- [ ] No aparecen errores ni avisos en la consola; Lighthouse Accessibility ≥ 90 en la página.
+- [x] Se ven 5 columnas con su contador y las tarjetas ordenadas por `boardPosition`.
+- [x] Al arrastrar de Guardada a Enviada, la tarjeta cambia de columna al instante y el cambio se mantiene al recargar.
+- [x] Al reordenar dentro de una columna se llama a `PATCH /applications/{id}` (no a `/status`) y no se crea ninguna entrada en el historial.
+- [x] Si el backend responde 409, la tarjeta vuelve a su sitio y aparece un *toast* con el `detail` del error.
+- [x] Se puede mover una tarjeta solo con el teclado (Espacio para cogerla, flechas para moverla, Espacio para soltarla).
+- [x] Las tarjetas con seguimiento vencido muestran el indicador.
+- [x] No aparecen errores ni avisos en la consola; Lighthouse Accessibility ≥ 90 en la página.
 
 **Tests**
 
@@ -1939,7 +2037,7 @@ Crear la página `/tablero`, con las candidaturas del usuario en 5 columnas y la
 
 ## 7. Pull Requests
 
-Cada ticket se desarrolla en su propia rama y se fusiona en `main` con una PR **dentro de mi repositorio**. Las PRs no son la entrega: la entrega es rama + Typeform. Convención: una rama por ticket (`feat/JP-XX-NN-descripcion`), título con [Conventional Commits](https://www.conventionalcommits.org/), descripción con el resumen de la fase 5 de `/ticket` (qué se ha hecho, tests, decisiones y cambios en el readme) y **CI en verde antes de fusionar** (desde la PR #7).
+Cada ticket se desarrolla en su propia rama y se fusiona en `main` con una PR **dentro de mi repositorio**. Las PRs no son la entrega: la entrega es rama + Typeform. Convención: una rama por ticket (`feat/JP-XX-NN-descripcion`), título con [Conventional Commits](https://www.conventionalcommits.org/), descripción con el resumen de la fase 5 de `/ticket` (qué se ha hecho, tests, decisiones y cambios en el readme) y **CI en verde antes de fusionar** (desde la PR #7). Las PRs #20 y #21 se fusionaron con la verificación local equivalente, porque GitHub había desactivado Actions (ver 2.4).
 
 **Pull Request 1** — [#1 `feat(backend): scaffolding Spring Boot, configuración y manejo global de errores`](https://github.com/AndresAvella16/AI4Devs-finalproject/pull/1) (JP-BE-01)
 
@@ -1961,7 +2059,7 @@ Cada ticket se desarrolla en su propia rama y se fusiona en `main` con una PR **
 - `LlmGateway.evaluateMatch` con validación de la respuesta (todos los requisitos, sin duplicados, de 3 a 5 sugerencias) y reintento. Al LLM solo se envía el perfil estructurado, sin el texto del CV, nombre ni email.
 - JaCoCo con regla de cobertura ≥ 90 % en `analysis.domain` (resultado: 100 %). Migración V3 que cierra las incoherencias 15, 16 y 17 de esa misma revisión.
 
-**Todas las PRs de la Entrega 2**
+**Todas las PRs**
 
 | PR | Ticket | Título |
 |---|---|---|
@@ -1976,3 +2074,45 @@ Cada ticket se desarrolla en su propia rama y se fusiona en `main` con una PR **
 | #9 | JP-BE-06 | feat(analysis): análisis de encaje con puntuación determinista |
 | #10 | JP-FE-03 | feat(offers): dashboard de ofertas, formulario de nueva oferta y detalle básico |
 | #11 | JP-FE-04 | feat(analysis): panel de análisis de encaje en el detalle de la oferta |
+| #12 | — | docs: cierre de la Entrega 2 (estado, capturas, tests, PRs y registro de IA) |
+| #13 | — | docs(prompts): índice de prompts clave y cómo se tomó el criterio humano |
+| #14 | JP-AI-01 | test(ai): validación con el LLM real (@Tag("llm-live")) fuera de la CI |
+| #15 | JP-BE-08 | feat(tracker): API de candidaturas y política de transiciones |
+| #16 | JP-FE-06 | feat(tracker): tablero kanban con dnd-kit y botón "Guardar en el tablero" |
+| #17 | JP-QA-01 | test(e2e): suite E2E con Playwright for Java del flujo principal |
+| #18 | JP-BE-04 | feat(profile): subida de CV y extracción de perfil con IA |
+| #19 | JP-FE-02 | feat(profile): onboarding con subida de CV y formulario de perfil |
+| #20 | JP-BE-07 | feat(document): generación de carta y CV adaptado con IA, versionado y PDF |
+| #21 | JP-FE-05 | feat(documents): editor de carta y CV adaptado con exportación a PDF |
+
+---
+
+## 8. Deuda técnica y fuera de alcance
+
+Único sitio donde se recoge lo que no se ha hecho y la deuda técnica conocida. Entre paréntesis, el ticket en el que se detectó.
+
+### 8.1. Fuera de alcance y no implementado
+
+- **Should-have S1 (preparación de entrevista) y S2 (recordatorios por email):** no se han implementado. Eran deseables, fuera del alcance obligatorio (ver 1.2).
+- **Despliegue público:** es opcional en el máster y no se ha hecho. La evidencia de funcionamiento es el vídeo (ver 0.4) y el repositorio con credenciales de prueba y pasos de verificación (ver 1.4). El diseño previsto está en 2.4.
+- **Decisiones explícitas de producto:** ni scraping de portales de empleo ni envío automático de candidaturas (ver 1.2).
+- **CI en GitHub Actions desactivada por GitHub (11/11/2026):** es externo al proyecto. Desde entonces se verifica en local con los mismos pasos de `ci.yml` (ver 2.4).
+
+### 8.2. Deuda técnica conocida
+
+- **`save()` de Spring Data hace `merge` en las entidades nuevas.** Los UUID se asignan en el constructor, así que Spring Data no distingue una entidad nueva de una existente y ejecuta un `SELECT` antes de cada `INSERT`. Funciona, pero cuesta una consulta de más. Se resolverá con una clase base que implemente `Persistable` (JP-DB-01).
+- **JWT en `localStorage` (JP-FE-01).** La sesión (token, `expiresAt` y datos del usuario) se guarda en `localStorage` para que aguante las recargas y sirva en todas las pestañas, pero un XSS podría leer el token. Mitigaciones actuales: el token caduca a los 60 min (el frontend lo descarta al llegar a `expiresAt` y ante cualquier `401`), React escapa el contenido que pinta, no se usa `dangerouslySetInnerHTML` y nginx envía una CSP con `script-src 'self'` estricto (JP-OPS-01, ver 2.5). El Markdown que genera la IA no hay que sanearlo **por diseño** (JP-FE-05): el frontend lo edita y lo muestra como texto en un `<textarea>`, sin convertirlo nunca a HTML (lo comprueba `DocumentsPanel.test.tsx`); el único sitio donde se convierte es el PDF del backend, que ya lo trata como no fiable (ver 2.5).
+- **La sesión no se sincroniza entre pestañas (JP-FE-01).** El frontend no escucha el evento `storage`: si se cierra la sesión en una pestaña, las demás siguen mostrando la sesión hasta que su siguiente llamada a la API recibe un `401` (o hasta que llega `expiresAt`), y entonces vuelven a `/login`.
+- **Aviso moderado de `npm audit` en `minimatch` (JP-FE-01).** Llega como dependencia de typescript-eslint, que solo se usa al pasar el lint: no forma parte del bundle que se sirve al navegador (`npm audit --omit=dev`: 0 vulnerabilidades; el 11/11/2026, `npm audit` cuenta 7 moderadas, todas de la misma cadena). `npm audit fix --force` lo resolvería rebajando typescript-eslint a una versión antigua, así que se deja hasta que typescript-eslint actualice la dependencia.
+- **Límites de peticiones en memoria (JP-BE-05).** Los cubos de Bucket4j viven en la memoria del backend: valen para una sola instancia (el despliegue previsto) y se reinician al reiniciarlo. Con varias instancias habría que pasarlos a un almacén compartido (Bucket4j tiene integración con Redis o PostgreSQL). Para acotar la memoria, al llegar a `jobpilot.rate-limit.max-keys` claves se olvidan las que tienen el cupo lleno.
+- **Borrador del CV en memoria (JP-BE-04).** El texto de un CV subido con `POST /profile/cv` espera en la memoria del backend (`CvDraftStore`, 30 min, como mucho `jobpilot.cv-draft.max-entries` borradores) hasta el `PUT /profile`. Como los cubos de Bucket4j, vale para una sola instancia y se pierde al reiniciar; si se pierde o caduca, el perfil se guarda igualmente, sin `cv_raw_text` ni `cv_file_name`. Con varias instancias habría que pasarlo a una tabla o a Redis.
+- **Proxies de confianza para `X-Forwarded-For` (JP-BE-05).** Tomcat da por internas las IPs privadas (10/8, 172.16/12, 192.168/16, 127/8…). En local, el puerto 8080 del backend también está publicado y las peticiones del host llegan desde la puerta de enlace de Docker (172.x), así que quien llame directamente a `:8080` puede falsear su IP. Por nginx (`:5173`) no, porque nginx sustituye la cabecera. Si se desplegara, habría que ajustar `server.tomcat.remoteip.internal-proxies` al proxy de la plataforma y no publicar el backend.
+- **Aviso de Mockito al ejecutar los tests** (*"A Java agent has been loaded dynamically"*). En Java 21 es inofensivo; una versión futura del JDK lo bloqueará. Se resolverá configurando Mockito como `-javaagent` en Surefire y Failsafe (JP-BE-01).
+- **Los E2E usan el mismo puerto que el stack de desarrollo (JP-OPS-01).** `docker-compose.e2e.yml` publica 5173 y 8080, como `docker-compose.yml`: no se pueden tener los dos levantados a la vez. En JP-QA-01 se decidió no cambiarlos: antes de los E2E hay que parar el stack de desarrollo (`docker compose stop backend frontend`). Si molesta, se pueden mover a otros puertos sin tocar los tests: el smoke test los lee de `FRONTEND_URL` y `BACKEND_URL`, y Playwright, de `FRONTEND_URL`.
+- **El `proxy_pass` de nginx apunta al nombre del servicio de Compose (JP-OPS-01).** `backend:8080` vale en local y en la CI; si se desplegara, habría que parametrizarlo (ver 2.4).
+- **La carga inicial del frontend ronda los 500 kB (JP-FE-04 → JP-FE-02).** Antes era un único chunk de 504,6 kB (155,1 kB con gzip) y `npm run build` avisaba. Desde JP-FE-06, el tablero, el detalle de oferta y la nueva oferta se cargan con `lazy` de React Router, cada uno con un `HydrateFallback`, y desde JP-FE-02 también el perfil (19,9 kB; 6,3 kB con gzip). Con JP-FE-02 el chunk inicial llegaba a 501,4 kB (lo nuevo es el cliente del perfil y el aviso "Crea tu perfil" del dashboard) y volvía el aviso, así que React, React DOM y React Router van ahora en su propio chunk (`vendor-react`, con `build.rolldownOptions.output.codeSplitting` en `vite.config.ts`): `index` 190,8 kB (58,1 kB con gzip) + `vendor-react` 310,3 kB (98,0 kB con gzip) + `rolldown-runtime` 0,6 kB (medido al cierre de la Entrega 3). **La primera carga sigue siendo de ~502 kB (~156 kB con gzip)**; lo que se gana es que ningún chunk pasa de 500 kB y que el de React, que cambia poco, se queda en la caché del navegador entre despliegues. Si la carga inicial sigue creciendo, lo siguiente es sacar del chunk inicial lo que solo usan algunas páginas (Zod y React Hook Form los usan el login y el registro).
+- **La carta gasta ~2.100 tokens de salida (JP-BE-07), unas 3 veces lo esperado.** En la prueba con la IA real (Claude Sonnet 5.5), una carta de 301 palabras costó 2.666 tokens de entrada y 2.099 de salida (`end_turn`, al primer intento), cuando ~300 palabras en español deberían rondar los 600–700. El CV adaptado, en cambio, gastó lo razonable (652 de salida para 171 palabras). La causa está pendiente de investigar: el contenido de las respuestas no se registra a propósito (datos personales), así que habrá que reproducirlo en un test `llm-live` que mida la longitud de la respuesta en bruto frente a los tokens.
+- **Fuentes estándar en el PDF (JP-BE-07).** El PDF usa las fuentes base de PDF (Helvetica), que cubren el español, el inglés y "€". Los caracteres que no cubren (emojis, alfabetos no latinos) salen como `#`. Se resolverá incrustando una fuente TTF libre (p. ej. DejaVu Sans o Noto Sans) con `useFont` de OpenHTMLtoPDF.
+- **El historial de documentos no muestra versiones antiguas (JP-FE-05).** `GET /offers/{offerId}/documents` devuelve completa solo la última versión; de las demás, solo los metadatos. El historial del frontend es de solo lectura y no permite ver ni restaurar una versión anterior. Haría falta un endpoint `GET /documents/{documentId}`.
+- **Comentario desfasado en `application-e2e.yml` (JP-QA-01).** Dice que cada ejecución de la suite gasta 2 llamadas a la IA del usuario del seed; hoy cada test registra su propia cuenta y gasta 4 (ver 2.6). El valor (10.000/h) sigue siendo correcto; solo hay que corregir el comentario.
+- **Sin `llm_model` en `generated_documents` (JP-BE-07).** Era la incoherencia 24 de la revisión de la Entrega 1 (opcional, ver `prompts.md`, sección 4): los documentos generados no guardan qué modelo los escribió, a diferencia de `match_analyses.llm_model`. Se resolvería con una migración nueva (columna que admita NULL para las filas existentes) y rellenándola en `DocumentService`.

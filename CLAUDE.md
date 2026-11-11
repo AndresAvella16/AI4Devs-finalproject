@@ -23,7 +23,7 @@ El usuario sube su CV, pega ofertas de trabajo y obtiene un análisis de encaje,
 | BD | PostgreSQL 16, Flyway (`spring-boot-starter-flyway` + `flyway-database-postgresql`; en Boot 4 `flyway-core` solo no activa la autoconfiguración) |
 | Utilidades backend | Bucket4j, Apache PDFBox, CommonMark, OpenHTMLtoPDF |
 | Frontend | React 19, TypeScript (strict), Vite, React Router, TanStack Query, React Hook Form + Zod, Tailwind CSS, dnd-kit |
-| Tests | JUnit 5, AssertJ, Mockito, Testcontainers, MockMvc · Vitest, React Testing Library, MSW · Playwright for Java (`e2e/`) |
+| Tests | JUnit 6 (Jupiter 6.0.3), AssertJ, Mockito, Testcontainers, MockMvc · Vitest, React Testing Library, MSW · Playwright for Java (`e2e/`) |
 | Infra | Docker, Docker Compose, GitHub Actions |
 
 Build: Maven Wrapper (`mvnw`) en `backend/` y `e2e/`; npm en `frontend/`.
