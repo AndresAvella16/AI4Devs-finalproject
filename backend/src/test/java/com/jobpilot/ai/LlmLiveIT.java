@@ -6,6 +6,7 @@ import com.jobpilot.analysis.domain.MatchResult;
 import com.jobpilot.analysis.domain.MatchScoreCalculator;
 import com.jobpilot.analysis.domain.RequirementEvaluation;
 import com.jobpilot.analysis.domain.ScoreResult;
+import com.jobpilot.document.domain.DocumentType;
 import com.jobpilot.offer.domain.RequirementType;
 import com.jobpilot.offer.domain.WorkMode;
 import com.jobpilot.support.EnabledIfAnthropicApiKey;
@@ -14,7 +15,9 @@ import jakarta.validation.Validator;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -37,8 +40,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Excluido de {@code mvnw verify} y de la CI ({@code excludedGroups} en pom.xml). Se ejecuta a mano con
  * {@code cd backend; .\mvnw.cmd verify -Pllm-live}, que lee la clave del entorno o de {@code ../.env}; sin clave, se
- * salta. Coste: 4 llamadas (3 extracciones + 1 encaje que reutiliza una de ellas), más un posible reintento por
- * respuesta no válida.
+ * salta. Coste: 5 llamadas (3 extracciones, 1 encaje que reutiliza una de ellas y 1 carta que reutiliza el encaje),
+ * más un posible reintento por respuesta no válida.
  */
 @Tag("llm-live")
 @EnabledIfAnthropicApiKey
@@ -52,6 +55,12 @@ class LlmLiveIT {
 
     /** Una extracción por oferta en toda la clase: el test de encaje reutiliza la de {@link #MATCH_OFFER}. */
     private static final Map<String, OfferExtraction> EXTRACTIONS = new ConcurrentHashMap<>();
+
+    /** Un encaje en toda la clase (con la oferta {@link #MATCH_OFFER}): lo reutiliza el test de la carta. */
+    private static final Map<String, EvaluatedOffer> EVALUATIONS = new ConcurrentHashMap<>();
+
+    private record EvaluatedOffer(List<RequirementSnapshot> requirements, MatchEvaluation evaluation) {
+    }
 
     @Autowired
     private LlmGateway gateway;
@@ -81,13 +90,10 @@ class LlmLiveIT {
 
     @Test
     void elEncajeConElPerfilDeEjemploCumpleLasReglasYDaUnaPuntuacionEntre0Y100() {
-        List<RequirementSnapshot> requirements = extract(MATCH_OFFER).requirements().stream()
-                .map(requirement -> new RequirementSnapshot(UUID.randomUUID(), requirement.description(),
-                        requirement.type(), requirement.category()))
-                .toList();
+        EvaluatedOffer evaluated = evaluate(MATCH_OFFER);
+        List<RequirementSnapshot> requirements = evaluated.requirements();
         List<UUID> ids = requirements.stream().map(RequirementSnapshot::id).toList();
-
-        MatchEvaluation evaluation = gateway.evaluateMatch(sampleProfile(), requirements);
+        MatchEvaluation evaluation = evaluated.evaluation();
 
         assertThat(validator.validate(evaluation)).as("Bean Validation de MatchEvaluation").isEmpty();
         assertThat(new MatchEvaluationValidator(ids).validate(evaluation)).as("MatchEvaluationValidator").isEmpty();
@@ -109,6 +115,64 @@ class LlmLiveIT {
                 .map(match -> new RequirementEvaluation(types.get(match.requirementId()), match.result()))
                 .toList());
         assertThat(score.score()).isBetween(0, 100);
+    }
+
+    /**
+     * HU-04, "Generación de la carta", comprobada por reglas y no por el texto: 250–400 palabras (el rango exacto del
+     * prompt; el validador de la aplicación solo rechaza fuera de 200–500), en el idioma de la oferta (española: acaba
+     * en "Atentamente,"), menciona el puesto y al menos dos requisitos que el candidato cumple, y sin firma ni huecos
+     * para rellenar: la firma la añade el servidor.
+     */
+    @Test
+    void laCartaCumpleLasReglasDeLaHu04() {
+        OfferExtraction extraction = extract(MATCH_OFFER);
+        EvaluatedOffer evaluated = evaluate(MATCH_OFFER);
+        Map<UUID, RequirementSnapshot> byId = evaluated.requirements().stream()
+                .collect(Collectors.toMap(RequirementSnapshot::id, requirement -> requirement));
+        List<DocumentContext.RequirementResult> results = evaluated.evaluation().matches().stream()
+                .map(match -> new DocumentContext.RequirementResult(byId.get(match.requirementId()).description(),
+                        byId.get(match.requirementId()).type(), match.result(), match.evidence()))
+                .toList();
+        DocumentContext context = new DocumentContext(DocumentType.CARTA,
+                new DocumentContext.OfferData(extraction.title(), extraction.company(), extraction.location(),
+                        extraction.workMode(), fixture(MATCH_OFFER)),
+                sampleProfile(), evaluated.evaluation().summary(), results);
+
+        GeneratedDocumentContent letter = gateway.generateDocument(context);
+        String text = letter.contentMarkdown();
+        String lower = text.toLowerCase(Locale.ROOT);
+
+        assertThat(validator.validate(letter)).as("Bean Validation de GeneratedDocumentContent").isEmpty();
+        assertThat(new GeneratedDocumentValidator(DocumentType.CARTA).validate(letter))
+                .as("GeneratedDocumentValidator").isEmpty();
+        assertThat(GeneratedDocumentValidator.countWords(text)).as("250-400 palabras").isBetween(250, 400);
+        assertThat(text.strip()).as("en español y sin firma").endsWith("Atentamente,");
+        assertThat(text).as("sin huecos para rellenar").doesNotContain("[").doesNotContain("]");
+        assertThat(significantWords(extraction.title())).as("menciona el puesto").allMatch(lower::contains);
+        assertThat(results)
+                .filteredOn(result -> result.result() == MatchResult.CUMPLE)
+                .as("menciona al menos dos requisitos que cumple")
+                .filteredOn(result -> significantWords(result.description()).stream().anyMatch(lower::contains))
+                .hasSizeGreaterThanOrEqualTo(2);
+    }
+
+    /** Palabras de 4 o más letras, en minúsculas y sin las palabras vacías más comunes. */
+    private static List<String> significantWords(String text) {
+        List<String> stopwords = List.of("para", "como", "años", "menos", "experiencia", "conocimientos", "habitual",
+                "uso", "with", "from");
+        return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
+                .filter(word -> word.length() >= 4 && !stopwords.contains(word))
+                .toList();
+    }
+
+    private EvaluatedOffer evaluate(String offer) {
+        return EVALUATIONS.computeIfAbsent(offer, name -> {
+            List<RequirementSnapshot> requirements = extract(name).requirements().stream()
+                    .map(requirement -> new RequirementSnapshot(UUID.randomUUID(), requirement.description(),
+                            requirement.type(), requirement.category()))
+                    .toList();
+            return new EvaluatedOffer(requirements, gateway.evaluateMatch(sampleProfile(), requirements));
+        });
     }
 
     private OfferExtraction extract(String offer) {

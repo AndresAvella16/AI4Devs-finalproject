@@ -6,8 +6,10 @@ import static com.jobpilot.analysis.domain.MatchResult.PARCIAL;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jobpilot.analysis.domain.MatchResult;
+import com.jobpilot.document.domain.DocumentType;
 import com.jobpilot.offer.domain.RequirementCategory;
 import com.jobpilot.offer.domain.RequirementType;
+import com.jobpilot.offer.domain.WorkMode;
 import jakarta.validation.Validation;
 import java.util.List;
 import java.util.UUID;
@@ -95,5 +97,41 @@ class FakeLlmGatewayTest {
         assertThat(extraction.education()).hasSize(1);
         assertThat(extraction.languages()).hasSize(2);
         assertThat(gateway.extractProfile("Otro CV")).isEqualTo(extraction);
+    }
+
+    // ---- Documentos (JP-BE-07) ----
+
+    private static DocumentContext documentContext(DocumentType type) {
+        return new DocumentContext(type, new DocumentContext.OfferData("Desarrollador/a Java Junior", null, "Valencia",
+                WorkMode.HIBRIDO, "Texto de la oferta"), PROFILE, "Resumen", List.of());
+    }
+
+    private static void assertValidDocument(DocumentType type, GeneratedDocumentContent content) {
+        assertThat(Validation.buildDefaultValidatorFactory().getValidator().validate(content)).isEmpty();
+        assertThat(new GeneratedDocumentValidator(type).validate(content)).isEmpty();
+    }
+
+    @Test
+    void laCartaFakeCumpleLaHu04ConLaOfertaYElPerfilFake() {
+        GeneratedDocumentContent letter = gateway.generateDocument(documentContext(DocumentType.CARTA));
+        String text = letter.contentMarkdown();
+
+        assertValidDocument(DocumentType.CARTA, letter);
+        assertThat(GeneratedDocumentValidator.countWords(text)).as("250-400 palabras (HU-04)").isBetween(250, 400);
+        assertThat(text).contains("Desarrollador/a Java Junior");
+        assertThat(List.of("Spring Boot", "PostgreSQL", "Git")).as("al menos dos requisitos que cumple")
+                .filteredOn(text::contains).hasSizeGreaterThanOrEqualTo(2);
+        assertThat(text).as("termina en la despedida, sin firma: la añade el servidor").endsWith("Atentamente,");
+        assertThat(text).as("sin huecos para rellenar").doesNotContain("[").doesNotContain("]");
+    }
+
+    @Test
+    void elCvAdaptadoFakeEsValidoYNoEsLaCarta() {
+        GeneratedDocumentContent cv = gateway.generateDocument(documentContext(DocumentType.CV_ADAPTADO));
+
+        assertValidDocument(DocumentType.CV_ADAPTADO, cv);
+        assertThat(cv.contentMarkdown()).contains("Tecnologías Turia").doesNotContain("Atentamente,");
+        assertThat(cv.contentMarkdown())
+                .isNotEqualTo(gateway.generateDocument(documentContext(DocumentType.CARTA)).contentMarkdown());
     }
 }
