@@ -4,6 +4,7 @@ import type { OfferResponse, Requirement, RequirementType } from '../../api/offe
 import { Alert } from '../../components/Alert';
 import { AnalysisPanel } from '../analysis/AnalysisPanel';
 import { Button } from '../../components/Button';
+import { DocumentsPanel } from '../documents/DocumentsPanel';
 import { toGeneralError } from '../../components/serverErrors';
 import { SaveToBoard } from '../tracker/SaveToBoard';
 import { CATEGORY_LABELS, formatDate, formatSalary, UNTITLED_OFFER, WORK_MODE_LABELS } from './labels';
@@ -13,7 +14,8 @@ const backLink = 'text-sm font-medium text-indigo-700 underline-offset-2 hover:u
 
 /**
  * Detalle de una oferta (`/ofertas/:offerId`): cabecera con "Guardar en el tablero" (JP-FE-06), requisitos agrupados
- * y panel de análisis de encaje (JP-FE-04) si la extracción está COMPLETADA; si no, el reintento de la extracción.
+ * panel de análisis de encaje (JP-FE-04) y carta y CV adaptado (JP-FE-05) si la extracción está COMPLETADA; si no,
+ * el reintento de la extracción.
  */
 export function OfferDetailPage() {
   const { offerId = '' } = useParams();
@@ -107,6 +109,7 @@ function OfferDetail({ offer }: { offer: OfferResponse }) {
             <RequirementGroup title="Deseables" type="DESEABLE" requirements={offer.requirements} />
           </div>
           <AnalysisPanel offerId={offer.id} />
+          <DocumentsPanel offerId={offer.id} />
         </>
       ) : (
         <RetryExtraction offer={offer} />

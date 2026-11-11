@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API, authResponse, problem } from '../test/handlers';
 import { server } from '../test/server';
 import { ApiError } from './ApiError';
-import { apiFetch, apiRequest, setUnauthorizedHandler } from './client';
+import { apiDownload, apiFetch, apiRequest, setUnauthorizedHandler } from './client';
 import { loadSession, saveSession } from './session';
 
 afterEach(() => setUnauthorizedHandler(null));
@@ -172,5 +172,65 @@ describe('apiFetch', () => {
     server.use(http.get(`${API}/ping`, () => new HttpResponse(null, { status: 204 })));
 
     await expect(apiFetch('/ping')).resolves.toBeUndefined();
+  });
+});
+
+describe('apiDownload (JP-FE-05)', () => {
+  const PDF = new TextEncoder().encode('%PDF-1.7 prueba');
+
+  function pdfHandler(contentDisposition: string | null, seen: { authorization: string | null; accept: string | null }[]) {
+    server.use(
+      http.get(`${API}/files/1`, ({ request }) => {
+        seen.push({ authorization: request.headers.get('Authorization'), accept: request.headers.get('Accept') });
+        const headers = new Headers({ 'Content-Type': 'application/pdf' });
+        if (contentDisposition !== null) headers.set('Content-Disposition', contentDisposition);
+        return new HttpResponse(PDF, { headers });
+      }),
+    );
+  }
+
+  it('descarga el fichero con el JWT, pide el tipo indicado y lee el nombre de Content-Disposition', async () => {
+    saveSession(authResponse());
+    const seen: { authorization: string | null; accept: string | null }[] = [];
+    pdfHandler('attachment; filename="carta-v2.pdf"', seen);
+
+    const file = await apiDownload('/files/1', 'application/pdf');
+
+    expect(file.fileName).toBe('carta-v2.pdf');
+    expect(await file.blob.text()).toBe('%PDF-1.7 prueba');
+    expect(seen).toEqual([{ authorization: 'Bearer test.jwt.token', accept: 'application/pdf, application/problem+json' }]);
+  });
+
+  it('entiende filename* (RFC 5987) y lo prefiere a filename', async () => {
+    pdfHandler(`attachment; filename="cv.pdf"; filename*=UTF-8''cv-adaptado-v1%C3%B1.pdf`, []);
+
+    await expect(apiDownload('/files/1', 'application/pdf')).resolves.toMatchObject({ fileName: 'cv-adaptado-v1ñ.pdf' });
+  });
+
+  it('sin Content-Disposition el nombre es null', async () => {
+    pdfHandler(null, []);
+
+    await expect(apiDownload('/files/1', 'application/pdf')).resolves.toMatchObject({ fileName: null });
+  });
+
+  it('un error devuelve ApiError con el ProblemDetail, y un 401 cierra la sesión', async () => {
+    saveSession(authResponse());
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    server.use(
+      http.get(`${API}/files/404`, () => problem(404, 'not-found', 'Recurso no encontrado', 'El documento no existe.')),
+      http.get(`${API}/files/401`, () => problem(401, 'unauthorized', 'No autenticado', 'Token caducado.')),
+    );
+
+    await expect(apiDownload('/files/404', 'application/pdf')).rejects.toMatchObject({
+      status: 404,
+      slug: 'not-found',
+      detail: 'El documento no existe.',
+    });
+    expect(loadSession()).not.toBeNull();
+
+    await expect(apiDownload('/files/401', 'application/pdf')).rejects.toBeInstanceOf(ApiError);
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+    expect(loadSession()).toBeNull();
   });
 });

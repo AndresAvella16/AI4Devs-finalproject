@@ -8,6 +8,7 @@ import type {
   UpdateApplicationRequest,
 } from '../api/applications';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '../api/auth';
+import type { DocumentHistoryResponse, DocumentResponse, DocumentType } from '../api/documents';
 import type { OfferResponse, OfferSummary } from '../api/offers';
 import type { CvDraftResponse, ProfileRequest, ProfileResponse } from '../api/profile';
 
@@ -510,4 +511,105 @@ export const profileHandlers = [
   http.get(`${API}/profile`, () => HttpResponse.json(demoProfile())),
   http.post(`${API}/profile/cv`, () => HttpResponse.json(exampleCvDraft())),
   http.put(`${API}/profile`, async ({ request }) => savedProfileResponse((await request.json()) as ProfileRequest, false)),
+];
+
+// ---------------------------------------------------------------------------
+// Documentos (JP-FE-05): almacén en memoria que imita al backend de JP-BE-07 (numeración propia por tipo, la carta
+// firmada con el nombre del usuario y 409 `document-version-conflict` si se edita una versión que ya no es la última).
+// ---------------------------------------------------------------------------
+
+export const EXAMPLE_LETTER =
+  'Estimado equipo de selección:\n\nMe dirijo a ustedes para presentar mi candidatura al puesto de Desarrollador/a ' +
+  'Java Junior. Trabajo con Java 21 y Spring Boot sobre PostgreSQL.\n\nAtentamente,\n\nLucía Demo';
+
+export const EXAMPLE_TAILORED_CV =
+  '# Lucía Demo\n\n**Desarrolladora Java Junior**\n\n## Experiencia\n\n- APIs REST con Java 21 y Spring Boot';
+
+/** PDF mínimo (basta con la firma) que devuelve `GET /documents/{id}/pdf`. */
+export const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\n%fake\n');
+
+let documentStore: DocumentResponse[] = [];
+let documentSeq = 0;
+
+export function resetDocumentStore(documents: DocumentResponse[] = []): void {
+  documentStore = documents.map((document) => ({ ...document }));
+  documentSeq = documents.length;
+}
+
+export function storedDocuments(type?: DocumentType): DocumentResponse[] {
+  return documentStore.filter((document) => type === undefined || document.type === type);
+}
+
+function nextDocumentId(): string {
+  documentSeq += 1;
+  return `dddddddd-0000-4000-8000-${String(documentSeq).padStart(12, '0')}`;
+}
+
+/** Guarda en el almacén una versión nueva del tipo indicado (con el número siguiente) y la devuelve. */
+export function addDocument(type: DocumentType, contentMarkdown: string, editedByUser: boolean): DocumentResponse {
+  const version = Math.max(0, ...storedDocuments(type).map((document) => document.version)) + 1;
+  const document: DocumentResponse = {
+    id: nextDocumentId(),
+    type,
+    version,
+    contentMarkdown,
+    editedByUser,
+    createdAt: `2026-11-11T10:${String(version).padStart(2, '0')}:00Z`,
+  };
+  documentStore.push(document);
+  return document;
+}
+
+export function documentHistory(type: DocumentType): DocumentHistoryResponse | null {
+  const versions = [...storedDocuments(type)].sort((a, b) => b.version - a.version);
+  const [latest] = versions;
+  if (latest === undefined) return null;
+  return {
+    latest,
+    versions: versions.map(({ id, version, editedByUser, createdAt }) => ({ id, version, editedByUser, createdAt })),
+  };
+}
+
+export function documentConflict() {
+  return problem(
+    409,
+    'document-version-conflict',
+    'El documento ha cambiado',
+    'Se ha guardado otra versión de este documento. Carga la última antes de guardar.',
+  );
+}
+
+export const documentHandlers = [
+  http.get(`${API}/offers/:offerId/documents`, ({ request }) => {
+    const type = new URL(request.url).searchParams.get('type') as DocumentType;
+    const history = documentHistory(type);
+    return history === null
+      ? problem(404, 'not-found', 'Recurso no encontrado', 'La oferta aún no tiene ese documento.')
+      : HttpResponse.json(history);
+  }),
+  http.post(`${API}/offers/:offerId/documents`, async ({ request }) => {
+    const { type } = (await request.json()) as { type: DocumentType };
+    const content = type === 'CARTA' ? EXAMPLE_LETTER : EXAMPLE_TAILORED_CV;
+    return HttpResponse.json(addDocument(type, content, false), { status: 201 });
+  }),
+  http.post(`${API}/documents/:documentId/versions`, async ({ params, request }) => {
+    const base = documentStore.find((document) => document.id === params.documentId);
+    if (base === undefined) return problem(404, 'not-found', 'Recurso no encontrado', 'El documento no existe.');
+    const latest = documentHistory(base.type)?.latest;
+    if (latest?.id !== base.id) return documentConflict();
+    const { contentMarkdown } = (await request.json()) as { contentMarkdown: string };
+    return HttpResponse.json(addDocument(base.type, contentMarkdown, true), { status: 201 });
+  }),
+  http.get(`${API}/documents/:documentId/pdf`, ({ params }) => {
+    const document = documentStore.find((stored) => stored.id === params.documentId);
+    if (document === undefined) return problem(404, 'not-found', 'Recurso no encontrado', 'El documento no existe.');
+    const prefix = document.type === 'CARTA' ? 'carta' : 'cv-adaptado';
+    return new HttpResponse(PDF_BYTES, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${prefix}-v${document.version}.pdf"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }),
 ];

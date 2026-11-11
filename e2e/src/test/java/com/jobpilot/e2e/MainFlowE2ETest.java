@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.jobpilot.e2e.support.E2EData;
 import com.jobpilot.e2e.support.E2ETestBase;
 import com.jobpilot.e2e.support.SampleCv;
+import com.microsoft.playwright.Download;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Mouse;
 import com.microsoft.playwright.Page;
@@ -14,6 +15,11 @@ import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.AriaRole;
 import com.microsoft.playwright.options.BoundingBox;
 import com.microsoft.playwright.options.FilePayload;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,12 +27,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * JP-QA-01 / JP-FE-02 · Flujo principal (readme 2.6), con lo que está implementado hoy:
- * registro → subir el CV de ejemplo → revisar y guardar el perfil → pegar una oferta → requisitos → análisis (85) →
- * guardar en el tablero → arrastrar a "Enviada" → recargar.
- *
- * <p>Hueco pendiente, marcado con {@code TODO} donde irá: generar la carta → exportar el PDF y verificar la descarga
- * (JP-BE-07 / JP-FE-05).
+ * JP-QA-01 / JP-FE-02 / JP-FE-05 · Flujo principal (readme 2.6): registro → subir el CV de ejemplo → revisar y
+ * guardar el perfil → pegar una oferta → requisitos → análisis (85) → generar la carta → editarla y guardarla
+ * (versión 2) → exportar el PDF y verificar la descarga → guardar en el tablero → arrastrar a "Enviada" → recargar.
  *
  * <p>Cada ejecución crea su propia cuenta (email aleatorio), importa su propia oferta y localiza su tarjeta por
  * {@code data-offer-id}: la suite se puede repetir sobre el mismo stack sin reiniciarlo.
@@ -36,7 +39,7 @@ class MainFlowE2ETest extends E2ETestBase {
     private static final Pattern OFFER_URL = Pattern.compile("/ofertas/([0-9a-f-]{36})$");
 
     @Test
-    @DisplayName("Flujo principal: registro → CV → perfil → oferta → análisis → tablero → Enviada, y se mantiene al recargar")
+    @DisplayName("Flujo principal: registro → CV → perfil → oferta → análisis → carta → PDF → tablero → Enviada, y se mantiene al recargar")
     void flujoPrincipalDelRegistroAlTablero() {
         register();
         uploadCvAndSaveProfile();
@@ -45,7 +48,7 @@ class MainFlowE2ETest extends E2ETestBase {
         checkRequirements();
         checkAnalysis();
 
-        // TODO(JP-BE-07 / JP-FE-05): generar la carta → exportar el PDF (page.waitForDownload) y comprobar el fichero.
+        generateEditAndExportLetter();
 
         saveToBoard();
         Locator card = card(offerId);
@@ -118,6 +121,49 @@ class MainFlowE2ETest extends E2ETestBase {
         assertThat(page.getByTestId("analysis-score"))
                 .hasAttribute("aria-label", "Encaje: " + E2EData.FAKE_SCORE + " de 100");
         assertThat(page.getByTestId("requirement-match-row")).hasCount(6);
+    }
+
+    /**
+     * Genera la carta (LLM fake: fake-llm/document-carta.json, firmada por el servidor con el nombre de la cuenta),
+     * añade una línea y la guarda como versión 2 ("Editada por mí"), y exporta el PDF. Mientras hay cambios sin guardar,
+     * "Exportar PDF" está desactivado. Del PDF se comprueba el nombre, que no esté vacío y la firma {@code %PDF-}; su
+     * contenido y la cabecera con el nombre ya los prueban {@code PdfRendererTest} y {@code DocumentControllerIT}.
+     */
+    private void generateEditAndExportLetter() {
+        Locator letter = page.getByTestId("document-panel-CARTA");
+        letter.getByTestId("document-generate-button").click();
+
+        Locator editor = letter.getByTestId("document-editor");
+        // Playwright pasa el patrón a una RegExp de JS: nada de Pattern.quote (\Q...\E) ni de flags en línea. El título
+        // y el nombre no tienen metacaracteres de regex.
+        assertThat(editor).hasValue(Pattern.compile("puesto de " + E2EData.FAKE_OFFER_TITLE));
+        assertThat(editor).hasValue(Pattern.compile("Atentamente,\\n\\n" + FULL_NAME + "$"));
+        assertThat(letter.getByTestId("document-version")).hasText("Versión 1 · Generada por la IA");
+
+        Locator export = letter.getByTestId("document-export-button");
+        editor.fill(editor.inputValue() + "\n\nP. D.: Tengo disponibilidad inmediata.");
+        assertThat(export).isDisabled();
+
+        Response saved = page.waitForResponse(
+                r -> r.request().method().equals("POST") && r.url().matches(".*/api/v1/documents/[0-9a-f-]{36}/versions$"),
+                () -> letter.getByTestId("document-save-button").click());
+        assertEquals(201, saved.status(), "POST /documents/{id}/versions → " + saved.status());
+        assertThat(letter.getByTestId("document-version")).hasText("Versión 2 · Editada por mí");
+        assertThat(export).isEnabled();
+
+        Download download = page.waitForDownload(export::click);
+        assertEquals("carta-v2.pdf", download.suggestedFilename());
+        byte[] pdf = readAll(download);
+        assertTrue(pdf.length > 5, "el PDF no está vacío");
+        assertEquals("%PDF-", new String(Arrays.copyOf(pdf, 5), StandardCharsets.US_ASCII));
+    }
+
+    private static byte[] readAll(Download download) {
+        try {
+            return Files.readAllBytes(download.path());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private void saveToBoard() {

@@ -34,10 +34,32 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
 
 /** Como {@link apiFetch}, pero devuelve también el código de estado. */
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<ApiResponse<T>> {
+  const response = await send(path, options, 'application/json, application/problem+json');
+  const text = await response.text();
+  return { status: response.status, data: (text === '' ? undefined : JSON.parse(text)) as T };
+}
+
+/** Fichero descargado de la API: su contenido y el nombre que propone el servidor en `Content-Disposition`. */
+export interface DownloadedFile {
+  blob: Blob;
+  fileName: string | null;
+}
+
+/**
+ * `GET` de un fichero (p. ej. el PDF de un documento) con el JWT, que un enlace normal no enviaría. Pide el tipo
+ * indicado (y `problem+json` para los errores) y trata los errores igual que {@link apiFetch}.
+ */
+export async function apiDownload(path: string, accept: string, signal?: AbortSignal): Promise<DownloadedFile> {
+  const response = await send(path, { signal }, `${accept}, application/problem+json`);
+  return { blob: await response.blob(), fileName: readFileName(response.headers.get('Content-Disposition')) };
+}
+
+/** Hace la petición y, si no es correcta, lanza el {@link ApiError} (y cierra la sesión ante un 401). */
+async function send(path: string, options: ApiRequestOptions, accept: string): Promise<Response> {
   const { method = 'GET', body, auth = true, signal } = options;
   const multipart = body instanceof FormData;
 
-  const headers = new Headers({ Accept: 'application/json, application/problem+json' });
+  const headers = new Headers({ Accept: accept });
   if (body !== undefined && !multipart) headers.set('Content-Type', 'application/json');
   const token = auth ? loadSession()?.accessToken : undefined;
   if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -63,9 +85,23 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
     throw apiError;
   }
+  return response;
+}
 
-  const text = await response.text();
-  return { status: response.status, data: (text === '' ? undefined : JSON.parse(text)) as T };
+/** `filename*=UTF-8''...` (RFC 5987), si está; si no, `filename="..."`. `null` si no hay ninguno. */
+function readFileName(contentDisposition: string | null): string | null {
+  if (contentDisposition === null) return null;
+  const extended = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(contentDisposition);
+  if (extended?.[1]) {
+    try {
+      return decodeURIComponent(extended[1].trim());
+    } catch {
+      // Codificación rota: se usa el filename simple.
+    }
+  }
+  const plain = /filename\s*=\s*(?:"([^"]*)"|([^;]+))/i.exec(contentDisposition);
+  const name = (plain?.[1] ?? plain?.[2])?.trim();
+  return name ? name : null;
 }
 
 function toUrl(path: string): string {
