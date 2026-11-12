@@ -39,7 +39,7 @@ Stack: **Java 21 + Spring Boot 4** (API REST), **PostgreSQL**, **React + TypeScr
 >
 > **Evidencia de funcionamiento:**
 >
-> - **Vídeo del flujo principal (2–3 min):** pendiente de enlace — VIDEO_URL
+> - **Vídeo del flujo principal (2–3 min):** [Ver el vídeo del flujo principal (2:54) en YouTube](https://youtu.be/sucwG7AbqGA)
 > - **El repositorio**, que se arranca en local con un solo comando (`docker compose up --build`) y las **credenciales de prueba** `demo@jobpilot.dev` / `Demo1234!`. Los pasos para el revisor están en la [sección 1.4](#14-instrucciones-de-instalación).
 > - Las capturas de la [sección 1.3](#13-diseño-y-experiencia-de-usuario).
 
@@ -147,7 +147,7 @@ Las cinco funcionalidades del MVP funcionan de extremo a extremo: navegador → 
 
 > Capturas con el usuario de prueba `demo@jobpilot.dev`, en modo `fake`, salvo las de la "Prueba con la IA real" (`LLM_MODE=real`). La del perfil es de una cuenta recién registrada, con el CV procesado por el LLM fake.
 >
-> **Vídeo del recorrido completo:** pendiente de enlace — VIDEO_URL
+> **Vídeo del recorrido completo:** [Ver el vídeo del flujo principal (2:54) en YouTube](https://youtu.be/sucwG7AbqGA)
 
 **Inicio tras el login**
 
